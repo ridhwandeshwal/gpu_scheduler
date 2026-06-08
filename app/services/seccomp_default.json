@@ -1,0 +1,116 @@
+{
+  "comment": "Restrictive seccomp profile for GPU Job Scheduler containers. Blocks dangerous syscalls that could be used for container escape or host disruption.",
+  "defaultAction": "SCMP_ACT_ALLOW",
+  "syscalls": [
+    {
+      "names": [
+        "mount",
+        "umount2",
+        "pivot_root",
+        "swapon",
+        "swapoff"
+      ],
+      "action": "SCMP_ACT_ERRNO",
+      "comment": "Prevent filesystem manipulation and swap control"
+    },
+    {
+      "names": [
+        "reboot",
+        "kexec_load",
+        "kexec_file_load"
+      ],
+      "action": "SCMP_ACT_ERRNO",
+      "comment": "Prevent host reboot or kernel replacement"
+    },
+    {
+      "names": [
+        "ptrace"
+      ],
+      "action": "SCMP_ACT_ERRNO",
+      "comment": "Prevent process tracing / debugging of other processes"
+    },
+    {
+      "names": [
+        "unshare",
+        "setns"
+      ],
+      "action": "SCMP_ACT_ERRNO",
+      "comment": "Prevent namespace manipulation (container escape vector)"
+    },
+    {
+      "names": [
+        "keyctl",
+        "add_key",
+        "request_key"
+      ],
+      "action": "SCMP_ACT_ERRNO",
+      "comment": "Prevent kernel keyring access"
+    },
+    {
+      "names": [
+        "init_module",
+        "finit_module",
+        "delete_module"
+      ],
+      "action": "SCMP_ACT_ERRNO",
+      "comment": "Prevent kernel module loading/unloading"
+    },
+    {
+      "names": [
+        "acct"
+      ],
+      "action": "SCMP_ACT_ERRNO",
+      "comment": "Prevent process accounting manipulation"
+    },
+    {
+      "names": [
+        "settimeofday",
+        "clock_settime",
+        "adjtimex",
+        "clock_adjtime"
+      ],
+      "action": "SCMP_ACT_ERRNO",
+      "comment": "Prevent system clock manipulation"
+    },
+    {
+      "names": [
+        "personality"
+      ],
+      "action": "SCMP_ACT_ERRNO",
+      "comment": "Prevent execution domain changes"
+    },
+    {
+      "names": [
+        "userfaultfd"
+      ],
+      "action": "SCMP_ACT_ERRNO",
+      "comment": "Prevent userfaultfd (used in some exploits)"
+    },
+    {
+      "names": [
+        "bpf",
+        "perf_event_open"
+      ],
+      "action": "SCMP_ACT_ERRNO",
+      "comment": "Prevent BPF and performance monitoring (information leak / exploit vector)"
+    },
+    {
+      "names": [
+        "open_by_handle_at",
+        "name_to_handle_at"
+      ],
+      "action": "SCMP_ACT_ERRNO",
+      "comment": "Prevent file handle based access (container escape vector via DAC_READ_SEARCH)"
+    },
+    {
+      "names": [
+        "kcmp",
+        "lookup_dcookie",
+        "move_pages",
+        "migrate_pages"
+      ],
+      "action": "SCMP_ACT_ERRNO",
+      "comment": "Prevent kernel introspection and NUMA migration"
+    }
+  ]
+}
