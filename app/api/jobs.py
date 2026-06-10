@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi.responses import FileResponse
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -161,7 +162,7 @@ async def submit_python_file_job(
         description=meta.description,
         source_type="python_file",
         status="queued",
-        priority=meta.priority,
+        priority=meta.priority if current_user.role == "admin" else 5,
         queue_name=meta.queue_name,
         requested_gpu_count=meta.requested_gpu_count,
         requested_cpu_cores=meta.requested_cpu_cores,
@@ -251,7 +252,7 @@ async def submit_github_job(
         description=body.description,
         source_type="github_repo",
         status="queued",
-        priority=body.priority,
+        priority=body.priority if current_user.role == "admin" else 5,
         queue_name=body.queue_name,
         requested_gpu_count=body.requested_gpu_count,
         requested_cpu_cores=body.requested_cpu_cores,
@@ -447,8 +448,20 @@ async def list_job_artifacts(
         .where(JobArtifact.job_run_id == job.latest_run_id)
         .order_by(JobArtifact.created_at.asc())
     )
-    artifacts = result.scalars().all()
-    return [JobArtifactResponse.model_validate(a) for a in artifacts]
+    return [
+        JobArtifactResponse(
+            id=a.id,
+            job_run_id=a.job_run_id,
+            artifact_type=a.artifact_type,
+            file_name=a.file_name,
+            file_path=a.file_path,
+            file_size_bytes=a.file_size_bytes,
+            checksum_sha256=a.checksum_sha256,
+            metadata=a.metadata_,
+            created_at=a.created_at,
+        )
+        for a in result.scalars().all()
+    ]
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -592,3 +605,107 @@ async def _stop_container(container_id: str) -> None:
         await asyncio.wait_for(process.wait(), timeout=15)
     except Exception:
         pass
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# GET /jobs/{job_id}/artifacts/{artifact_id}/download
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+@router.get(
+    "/{job_id}/artifacts/{artifact_id}/download",
+    summary="Download an artifact",
+)
+async def download_job_artifact(
+    job_id: uuid_mod.UUID,
+    artifact_id: uuid_mod.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> FileResponse:
+    """Download the physical file of a specific job artifact."""
+
+    # 1. Fetch job to verify ownership or admin rights
+    job_result = await db.execute(select(Job).where(Job.id == job_id))
+    job = job_result.scalars().first()
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    if job.user_id != current_user.id and current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Not authorized to access this job's artifacts")
+
+    # 2. Fetch artifact
+    from app.models import JobArtifact
+    art_result = await db.execute(
+        select(JobArtifact).where(JobArtifact.id == artifact_id)
+    )
+    artifact = art_result.scalars().first()
+    if artifact is None:
+        raise HTTPException(status_code=404, detail="Artifact not found")
+
+    # 3. Verify file path exists
+    file_path = Path(artifact.file_path)
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="Physical artifact file not found on storage")
+
+    return FileResponse(
+        path=str(file_path),
+        filename=artifact.file_name,
+        media_type="application/octet-stream",
+    )
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# GET /jobs/{job_id}/logs/{log_type}
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+@router.get(
+    "/{job_id}/logs/{log_type}",
+    summary="Download or view job logs",
+)
+async def download_job_logs(
+    job_id: uuid_mod.UUID,
+    log_type: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> FileResponse:
+    """Download stdout, stderr, or combined logs for the latest run of a job."""
+    if log_type not in ("stdout", "stderr", "combined"):
+        raise HTTPException(status_code=400, detail="Invalid log type. Choose stdout, stderr, or combined")
+
+    # 1. Fetch job to verify ownership or admin rights
+    job_result = await db.execute(select(Job).where(Job.id == job_id))
+    job = job_result.scalars().first()
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    if job.user_id != current_user.id and current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Not authorized to access this job's logs")
+
+    if job.latest_run_id is None:
+        raise HTTPException(status_code=404, detail="No run has been scheduled for this job yet")
+
+    # 2. Fetch latest run
+    run_result = await db.execute(select(JobRun).where(JobRun.id == job.latest_run_id))
+    run = run_result.scalars().first()
+    if run is None:
+        raise HTTPException(status_code=404, detail="Job run not found")
+
+    # Get log path based on type (fallback to local job workspace log path if DB entry is not yet populated)
+    if log_type == "stdout":
+        log_path_str = run.stdout_log_path or str(Path(settings.jobs_root) / str(job.latest_run_id) / "logs" / "stdout.log")
+    elif log_type == "stderr":
+        log_path_str = run.stderr_log_path or str(Path(settings.jobs_root) / str(job.latest_run_id) / "logs" / "stderr.log")
+    else:
+        log_path_str = run.combined_log_path or str(Path(settings.jobs_root) / str(job.latest_run_id) / "logs" / "combined.log")
+
+    if not log_path_str:
+        raise HTTPException(status_code=404, detail=f"Log file path for {log_type} is empty")
+
+    log_path = Path(log_path_str)
+    if not log_path.exists():
+        raise HTTPException(status_code=404, detail=f"Physical log file not found at {log_path_str}")
+
+    return FileResponse(
+        path=str(log_path),
+        filename=f"job_{job_id}_{log_type}.log",
+        media_type="text/plain",
+    )

@@ -135,6 +135,9 @@ class DockerRunner:
         timed_out = False
         error_message: Optional[str] = None
 
+        # Ensure logs directory exists
+        config.logs_dir.mkdir(parents=True, exist_ok=True)
+
         try:
             process = await asyncio.create_subprocess_exec(
                 *cmd,
@@ -142,15 +145,40 @@ class DockerRunner:
                 stderr=asyncio.subprocess.PIPE,
             )
 
+            stdout_file = open(stdout_path, "wb")
+            stderr_file = open(stderr_path, "wb")
+            combined_file = open(combined_path, "wb")
+
+            stdout_chunks = []
+            stderr_chunks = []
+
+            async def read_stream(stream, file_obj, chunks_list):
+                try:
+                    while True:
+                        chunk = await stream.read(4096)
+                        if not chunk:
+                            break
+                        file_obj.write(chunk)
+                        file_obj.flush()
+                        combined_file.write(chunk)
+                        combined_file.flush()
+                        chunks_list.append(chunk)
+                except asyncio.CancelledError:
+                    pass
+
+            stdout_task = asyncio.create_task(read_stream(process.stdout, stdout_file, stdout_chunks))
+            stderr_task = asyncio.create_task(read_stream(process.stderr, stderr_file, stderr_chunks))
+
             timeout = config.max_runtime_seconds
 
             try:
                 if timeout:
-                    stdout_data, stderr_data = await asyncio.wait_for(
-                        process.communicate(), timeout=timeout
+                    await asyncio.wait_for(
+                        asyncio.gather(stdout_task, stderr_task, process.wait()),
+                        timeout=timeout
                     )
                 else:
-                    stdout_data, stderr_data = await process.communicate()
+                    await asyncio.gather(stdout_task, stderr_task, process.wait())
             except asyncio.TimeoutError:
                 timed_out = True
                 error_message = (
@@ -163,19 +191,24 @@ class DockerRunner:
                 )
                 # Attempt graceful stop, then force-kill
                 await self._force_remove(container_name)
-                process.kill()
-                stdout_data, stderr_data = await process.communicate()
+                try:
+                    process.kill()
+                except ProcessLookupError:
+                    pass
+                await process.wait()
+            finally:
+                # Cancel the streaming tasks if they are still running
+                stdout_task.cancel()
+                stderr_task.cancel()
+                await asyncio.gather(stdout_task, stderr_task, return_exceptions=True)
 
-            # Write log files
-            stdout_path.write_bytes(stdout_data)
-            stderr_path.write_bytes(stderr_data)
+                # Close file descriptors
+                stdout_file.close()
+                stderr_file.close()
+                combined_file.close()
 
-            # Combined log
-            with open(combined_path, "wb") as f:
-                f.write(b"=== STDOUT ===\n")
-                f.write(stdout_data)
-                f.write(b"\n=== STDERR ===\n")
-                f.write(stderr_data)
+            stdout_data = b"".join(stdout_chunks)
+            stderr_data = b"".join(stderr_chunks)
 
             exit_code = process.returncode if process.returncode is not None else -1
             duration = time.monotonic() - start_time

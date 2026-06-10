@@ -6,9 +6,11 @@ import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.auth import router as auth_router
 from app.api.jobs import router as jobs_router
+from app.api.admin import router as admin_router
 from app.services.redis_queue import close_redis, get_redis
 
 logger = logging.getLogger("app")
@@ -45,10 +47,20 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# Enable CORS for local development
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 # ── Routers ───────────────────────────────────────────────
 
 app.include_router(auth_router, prefix="/auth", tags=["Authentication"])
 app.include_router(jobs_router, prefix="/jobs", tags=["Jobs"])
+app.include_router(admin_router, prefix="/admin", tags=["Admin Control"])
 
 
 # ── Health check ──────────────────────────────────────────
