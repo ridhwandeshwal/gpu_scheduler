@@ -138,11 +138,16 @@ class DockerRunner:
         # Ensure logs directory exists
         config.logs_dir.mkdir(parents=True, exist_ok=True)
 
+        env = os.environ.copy()
+        if settings.docker_host:
+            env["DOCKER_HOST"] = settings.docker_host
+
         try:
             process = await asyncio.create_subprocess_exec(
                 *cmd,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
+                env=env,
             )
 
             stdout_file = open(stdout_path, "wb")
@@ -303,8 +308,8 @@ class DockerRunner:
             args += [
                 f"--tmpfs=/tmp:rw,noexec,nosuid,size={tmpfs_size}m",
                 "--tmpfs=/var/tmp:rw,noexec,nosuid,size=256m",
-                # Some Python packages need writable home for caches
-                "--tmpfs=/home:rw,noexec,nosuid,size=128m",
+                # pip --user installs to ~/.local — needs enough room for torch etc.
+                f"--tmpfs=/home:rw,noexec,nosuid,size={tmpfs_size}m",
             ]
             # Redirect Python bytecode cache to /tmp (workspace is read-only).
             # PYTHONPYCACHEPREFIX requires Python 3.8+.

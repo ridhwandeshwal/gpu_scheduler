@@ -99,6 +99,11 @@ class GitHubJobRequest(BaseModel):
     queue_name: str = Field("default", max_length=64)
     env_vars: list[EnvVarInput] = Field(default_factory=list)
     job_config: Optional[dict[str, Any]] = None
+    requirements_file_path: Optional[str] = Field(
+        None,
+        max_length=512,
+        description="Relative path to requirements.txt inside the repository, e.g. 'requirements.txt'",
+    )
 
     @field_validator("repo_url")
     @classmethod
@@ -254,10 +259,9 @@ class JobArtifactResponse(BaseModel):
     job_run_id: uuid.UUID
     artifact_type: str
     file_name: str
-    file_path: str
+    object_key: str
     file_size_bytes: Optional[int] = None
     checksum_sha256: Optional[str] = None
-    metadata: Optional[dict[str, Any]] = None
     created_at: datetime
 
     model_config = {"from_attributes": True}

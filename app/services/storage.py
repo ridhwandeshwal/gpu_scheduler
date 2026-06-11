@@ -91,6 +91,9 @@ def prepare_workspace(
     # python_file mode
     uploaded_file_name: Optional[str] = None,
     uploaded_file_storage_path: Optional[str] = None,
+    requirements_file_path: Optional[str] = None,
+    setup_script_storage_path: Optional[str] = None,
+    setup_script_name: Optional[str] = None,
     # github_repo mode
     repo_url: Optional[str] = None,
     repo_branch: Optional[str] = None,
@@ -119,7 +122,14 @@ def prepare_workspace(
     nas_log.mkdir(parents=True, exist_ok=True)
 
     if source_type == "python_file":
-        _prepare_python_file(ws, uploaded_file_name, uploaded_file_storage_path)
+        _prepare_python_file(
+            ws,
+            uploaded_file_name,
+            uploaded_file_storage_path,
+            requirements_file_path,
+            setup_script_storage_path,
+            setup_script_name,
+        )
     elif source_type == "github_repo":
         _prepare_github_repo(
             ws,
@@ -139,8 +149,11 @@ def _prepare_python_file(
     workspace: Path,
     filename: Optional[str],
     storage_path: Optional[str],
+    requirements_file_path: Optional[str] = None,
+    setup_script_storage_path: Optional[str] = None,
+    setup_script_name: Optional[str] = None,
 ) -> None:
-    """Copy the uploaded Python file into the workspace."""
+    """Copy the uploaded Python script, optional setup shell script, and requirements.txt into the workspace."""
     if not filename or not storage_path:
         raise ValueError("uploaded_file_name and uploaded_file_storage_path are required")
 
@@ -151,6 +164,19 @@ def _prepare_python_file(
     dst = workspace / validate_filename(filename)
     shutil.copy2(src, dst)
     logger.info("Copied %s → %s", src, dst)
+
+    if setup_script_storage_path and setup_script_name:
+        sh_src = Path(setup_script_storage_path)
+        if sh_src.exists():
+            sh_dst = workspace / validate_filename(setup_script_name)
+            shutil.copy2(sh_src, sh_dst)
+            logger.info("Copied setup script %s → %s", sh_src, sh_dst)
+
+    if requirements_file_path:
+        req_src = Path(requirements_file_path)
+        if req_src.exists():
+            shutil.copy2(req_src, workspace / "requirements.txt")
+            logger.info("Copied requirements.txt → %s", workspace / "requirements.txt")
 
 
 def _prepare_github_repo(
@@ -228,79 +254,56 @@ def snapshot_workspace(workspace: Path) -> dict[str, str]:
 
 def collect_artifacts(
     run_id: uuid.UUID,
+    user_id: uuid.UUID,
     before: dict[str, str],
     after: dict[str, str],
     workspace: Path,
 ) -> list[dict]:
-    """Compare before/after snapshots to find new and modified files.
+    """Upload output files to MinIO and return artifact metadata for DB insertion.
 
-    Copies discovered artifacts to NAS and returns metadata for DB insertion.
-
-    Returns:
-        List of dicts with keys: artifact_type, file_name, file_path,
-        file_size_bytes, checksum_sha256.
+    Scans /outputs (container output dir) and workspace diff.
+    Returns list of dicts with keys: artifact_type, file_name, object_key,
+    file_size_bytes, checksum_sha256.
     """
-    artifacts: list[dict] = []
-    dest_dir = nas_artifacts_dir(run_id)
-    dest_dir.mkdir(parents=True, exist_ok=True)
+    from app.services.minio_client import upload_artifact
 
+    artifacts: list[dict] = []
+
+    def _upload(local_path: Path, artifact_type: str, sha256: str) -> None:
+        object_key = f"{user_id}/{run_id}/{local_path.name}"
+        file_size = upload_artifact(local_path, object_key)
+        artifacts.append(
+            {
+                "artifact_type": artifact_type,
+                "file_name": local_path.name,
+                "object_key": object_key,
+                "file_size_bytes": file_size,
+                "checksum_sha256": sha256,
+            }
+        )
+
+    # 1. Workspace diff — files created or modified by the job
     for rel_path, sha256 in after.items():
         if rel_path not in before:
             artifact_type = "output_new"
         elif before[rel_path] != sha256:
             artifact_type = "output_modified"
         else:
-            continue  # Unchanged
+            continue
+        _upload(workspace / rel_path, artifact_type, sha256)
 
-        src = workspace / rel_path
-        dst = dest_dir / rel_path
-
-        # Create parent directories in destination
-        dst.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(src, dst)
-
-        file_size = src.stat().st_size
-
-        artifacts.append(
-            {
-                "artifact_type": artifact_type,
-                "file_name": os.path.basename(rel_path),
-                "file_path": str(dst),
-                "file_size_bytes": file_size,
-                "checksum_sha256": sha256,
-            }
-        )
-
-    # 2. Scan nas_output_dir (since the container writes directly to the NAS /outputs mount)
+    # 2. /outputs dir — primary output path written by the container
     out_dir = nas_output_dir(run_id)
     if out_dir.exists():
         for root, _dirs, files in os.walk(out_dir):
-            # Skip checking/cataloging downloaded datasets like MNIST in 'data' directory
             if "data" in Path(root).parts:
-                continue
+                continue  # skip downloaded datasets
             for fname in files:
                 full_path = Path(root) / fname
-                rel_path = str(full_path.relative_to(out_dir))
-                file_size = full_path.stat().st_size
                 sha256 = _file_sha256(full_path)
+                _upload(full_path, "output_file", sha256)
 
-                artifacts.append(
-                    {
-                        "artifact_type": "output_file",
-                        "file_name": os.path.basename(rel_path),
-                        "file_path": str(full_path),
-                        "file_size_bytes": file_size,
-                        "checksum_sha256": sha256,
-                    }
-                )
-
-    logger.info(
-        "Collected %d artifact(s) for run %s (%d from workspace diff, %d from output dir)",
-        len(artifacts),
-        run_id,
-        sum(1 for a in artifacts if a["artifact_type"] in ("output_new", "output_modified")),
-        sum(1 for a in artifacts if a["artifact_type"] == "output_file"),
-    )
+    logger.info("Uploaded %d artifact(s) to MinIO for run %s", len(artifacts), run_id)
 
     return artifacts
 

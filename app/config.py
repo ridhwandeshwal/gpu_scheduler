@@ -31,15 +31,22 @@ class Settings(BaseSettings):
     jobs_root: str = "/gpu_scheduler/jobs"
     nas_root: str = "/mnt/nas/gpu_scheduler"
 
+    # ── MinIO (artifact storage) ──────────────────────────
+    minio_endpoint: str = "http://localhost:9000"
+    minio_access_key: str = "minioadmin"
+    minio_secret_key: str = "minioadmin"
+    minio_bucket: str = "artifacts"
+
     # ── Container Runtime ─────────────────────────────────
     container_runtime: str = "docker"
-    default_container_image: str = "gpu-scheduler-python-gpu:latest"
+    docker_host: str = ""  # e.g. unix:///run/user/1000/docker.sock for rootless
+    default_container_image: str = "python:3.11-slim"
     gpu_mode: str = "none"  # none | nvidia
 
     # ── Container Security ────────────────────────────────
     container_user: str = "1000:1000"
     container_read_only: bool = True
-    container_tmpfs_size_mb: int = 512
+    container_tmpfs_size_mb: int = 8192
     container_log_max_size: str = "50m"
     container_disk_quota: str = "10G"
 

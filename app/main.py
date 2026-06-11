@@ -11,6 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.auth import router as auth_router
 from app.api.jobs import router as jobs_router
 from app.api.admin import router as admin_router
+from app.services.minio_client import ensure_bucket
 from app.services.redis_queue import close_redis, get_redis
 
 logger = logging.getLogger("app")
@@ -30,6 +31,10 @@ async def lifespan(app: FastAPI):
     await get_redis()
     logger.info("Redis connection established")
 
+    # Ensure MinIO artifact bucket exists
+    ensure_bucket()
+    logger.info("MinIO bucket ready")
+
     yield
 
     # Shutdown
@@ -38,10 +43,9 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="GPU Job Scheduler",
+    title="Quda",
     description=(
-        "Backend execution layer for scheduling and running GPU-accelerated "
-        "jobs in hardened Docker containers."
+        "GPU job scheduler for the AIMS-DTU lab workstation."
     ),
     version="1.0.0",
     lifespan=lifespan,

@@ -371,7 +371,7 @@ class JobArtifact(Base):
     )
     artifact_type: Mapped[str] = mapped_column(String, nullable=False)
     file_name: Mapped[str] = mapped_column(String, nullable=False)
-    file_path: Mapped[str] = mapped_column(String, nullable=False)
+    object_key: Mapped[str] = mapped_column(String, nullable=False)  # MinIO object key
     file_size_bytes: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     checksum_sha256: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     metadata_: Mapped[Optional[dict[str, Any]]] = mapped_column(

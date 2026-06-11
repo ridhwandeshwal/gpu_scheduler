@@ -108,17 +108,25 @@ async def _insert_event(
     "/python-file",
     response_model=JobResponse,
     status_code=status.HTTP_201_CREATED,
-    summary="Submit a standalone Python file job",
+    summary="Submit a Python file job with optional shell setup script",
 )
 async def submit_python_file_job(
-    file: UploadFile = File(..., description="The Python file to execute"),
+    file: UploadFile = File(..., description="The .py script to execute"),
+    setup_script: Optional[UploadFile] = File(None, description="Optional .sh script run before the Python file"),
+    requirements_file: Optional[UploadFile] = File(None, description="Optional requirements.txt"),
     metadata: str = Form(
         ..., description="JSON string of PythonFileJobMetadata"
     ),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> JobResponse:
-    """Upload a Python file and create a queued job."""
+    """Upload a Python script (+ optional shell setup script) and create a queued job.
+
+    Execution order inside the container:
+      1. pip install -r requirements.txt  (if provided)
+      2. bash setup.sh                    (if provided)
+      3. python <script>.py
+    """
 
     # Parse metadata
     try:
@@ -129,28 +137,52 @@ async def submit_python_file_job(
             detail=f"Invalid metadata JSON: {e}",
         )
 
-    # Validate filename
+    # Validate main script — must be .py
     if not file.filename:
         raise HTTPException(status_code=400, detail="No filename provided")
     filename = _validate_filename(file.filename)
     if not filename.endswith(".py"):
-        raise HTTPException(status_code=400, detail="File must be a .py file")
+        raise HTTPException(status_code=400, detail="Main script must be a .py file")
 
-    # Read file content
+    # Read main script
     file_content = await file.read()
     if len(file_content) == 0:
         raise HTTPException(status_code=400, detail="Uploaded file is empty")
-
     file_sha256 = _compute_sha256(file_content)
 
-    # Generate job ID and save file
+    # Generate job ID and save files
     job_id = uuid_mod.uuid4()
     upload_dir = Path(settings.upload_root) / str(job_id)
     upload_dir.mkdir(parents=True, exist_ok=True)
     file_path = upload_dir / filename
     file_path.write_bytes(file_content)
+    storage_path = str(file_path)
 
-    storage_path = str(file_path)  # Absolute host path for python_file mode
+    # Handle optional setup shell script
+    setup_script_storage_path: Optional[str] = None
+    setup_script_name: Optional[str] = None
+    if setup_script and setup_script.filename:
+        sh_filename = _validate_filename(setup_script.filename)
+        if not sh_filename.endswith(".sh"):
+            raise HTTPException(status_code=400, detail="Setup script must be a .sh file")
+        sh_content = await setup_script.read()
+        if sh_content:
+            sh_path = upload_dir / sh_filename
+            sh_path.write_bytes(sh_content)
+            setup_script_storage_path = str(sh_path)
+            setup_script_name = sh_filename
+
+    # Handle optional requirements.txt
+    req_storage_path: Optional[str] = None
+    if requirements_file and requirements_file.filename:
+        req_filename = _validate_filename(requirements_file.filename)
+        if req_filename != "requirements.txt":
+            raise HTTPException(status_code=400, detail="Requirements file must be named requirements.txt")
+        req_content = await requirements_file.read()
+        if req_content:
+            req_path = upload_dir / "requirements.txt"
+            req_path.write_bytes(req_content)
+            req_storage_path = str(req_path)
 
     now = datetime.now(timezone.utc)
 
@@ -174,6 +206,10 @@ async def submit_python_file_job(
     )
     db.add(job)
 
+    # Store setup script name in job_config so the worker can find it
+    if setup_script_name:
+        job.job_config = {**(meta.job_config or {}), "setup_script_name": setup_script_name}
+
     # Create job input
     job_input = JobInput(
         job_id=job_id,
@@ -181,10 +217,11 @@ async def submit_python_file_job(
         uploaded_file_name=filename,
         uploaded_file_storage_path=storage_path,
         uploaded_file_sha256=file_sha256,
+        requirements_file_path=req_storage_path,
     )
     db.add(job_input)
 
-    # Create job command
+    # Command is just the python script — worker prepends pip install and bash setup
     command = JobCommand(
         job_id=job_id,
         step_order=0,
@@ -274,6 +311,7 @@ async def submit_github_job(
         repo_branch=body.repo_branch,
         repo_commit_hash=body.repo_commit_hash,
         repo_subdir=body.repo_subdir,
+        requirements_file_path=body.requirements_file_path or None,
     )
     db.add(job_input)
 
@@ -454,10 +492,9 @@ async def list_job_artifacts(
             job_run_id=a.job_run_id,
             artifact_type=a.artifact_type,
             file_name=a.file_name,
-            file_path=a.file_path,
+            object_key=a.object_key,
             file_size_bytes=a.file_size_bytes,
             checksum_sha256=a.checksum_sha256,
-            metadata=a.metadata_,
             created_at=a.created_at,
         )
         for a in result.scalars().all()
@@ -613,44 +650,33 @@ async def _stop_container(container_id: str) -> None:
 
 @router.get(
     "/{job_id}/artifacts/{artifact_id}/download",
-    summary="Download an artifact",
+    summary="Get a presigned download URL for an artifact",
 )
 async def download_job_artifact(
     job_id: uuid_mod.UUID,
     artifact_id: uuid_mod.UUID,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-) -> FileResponse:
-    """Download the physical file of a specific job artifact."""
+):
+    """Return a presigned MinIO URL for direct browser download (valid 15 min)."""
+    from fastapi.responses import RedirectResponse
+    from app.models import JobArtifact
+    from app.services.minio_client import presign_download
 
-    # 1. Fetch job to verify ownership or admin rights
     job_result = await db.execute(select(Job).where(Job.id == job_id))
     job = job_result.scalars().first()
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
-
     if job.user_id != current_user.id and current_user.role != "admin":
-        raise HTTPException(status_code=403, detail="Not authorized to access this job's artifacts")
+        raise HTTPException(status_code=403, detail="Not authorized")
 
-    # 2. Fetch artifact
-    from app.models import JobArtifact
-    art_result = await db.execute(
-        select(JobArtifact).where(JobArtifact.id == artifact_id)
-    )
+    art_result = await db.execute(select(JobArtifact).where(JobArtifact.id == artifact_id))
     artifact = art_result.scalars().first()
     if artifact is None:
         raise HTTPException(status_code=404, detail="Artifact not found")
 
-    # 3. Verify file path exists
-    file_path = Path(artifact.file_path)
-    if not file_path.exists():
-        raise HTTPException(status_code=404, detail="Physical artifact file not found on storage")
-
-    return FileResponse(
-        path=str(file_path),
-        filename=artifact.file_name,
-        media_type="application/octet-stream",
-    )
+    url = presign_download(artifact.object_key)
+    return RedirectResponse(url=url, status_code=302)
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

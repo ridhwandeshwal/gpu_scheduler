@@ -26,6 +26,7 @@ import logging
 import platform
 import uuid
 from datetime import datetime, timezone
+from typing import Optional
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -288,6 +289,16 @@ async def _execute_run(worker_id: uuid.UUID, run_id: uuid.UUID) -> None:
     try:
         _insert_event_sync = _make_event_inserter(job.id, run_id)
 
+        job_cfg = job.job_config or {}
+        setup_script_name = job_cfg.get("setup_script_name")
+        setup_script_storage_path: Optional[str] = None
+        if setup_script_name and job_input.uploaded_file_storage_path:
+            # Setup script lives alongside the main script in the upload dir
+            upload_dir = str(Path(job_input.uploaded_file_storage_path).parent)
+            candidate = Path(upload_dir) / setup_script_name
+            if candidate.exists():
+                setup_script_storage_path = str(candidate)
+
         ws = await asyncio.get_event_loop().run_in_executor(
             None,
             lambda: prepare_workspace(
@@ -295,6 +306,9 @@ async def _execute_run(worker_id: uuid.UUID, run_id: uuid.UUID) -> None:
                 job_input.source_type,
                 uploaded_file_name=job_input.uploaded_file_name,
                 uploaded_file_storage_path=job_input.uploaded_file_storage_path,
+                requirements_file_path=job_input.requirements_file_path,
+                setup_script_storage_path=setup_script_storage_path,
+                setup_script_name=setup_script_name,
                 repo_url=job_input.repo_url,
                 repo_branch=job_input.repo_branch,
                 repo_commit_hash=job_input.repo_commit_hash,
@@ -326,11 +340,33 @@ async def _execute_run(worker_id: uuid.UUID, run_id: uuid.UUID) -> None:
         # Fallback: build from job_input
         execution_command = _build_execution_command(job_input)
 
+    # Build the full command chain: pip install → setup.sh → main script
+    # Each step is only added when the file exists in the workspace.
+    steps: list[str] = []
+
+    # 1. pip install (if requirements.txt present)
+    # --user + PYTHONUSERBASE=/tmp/.pip-user because the container runs as
+    # non-root (1000:1000) with a read-only root filesystem; /tmp is a tmpfs.
+    pip_prefix = "export PYTHONUSERBASE=/tmp/.pip-user && pip install -q --user -r"
+    if job_input.source_type == "github_repo" and job_input.requirements_file_path:
+        if (ws / job_input.requirements_file_path).exists():
+            steps.append(f"{pip_prefix} {job_input.requirements_file_path}")
+    elif (ws / "requirements.txt").exists():
+        steps.append(f"{pip_prefix} requirements.txt")
+
+    # 2. Setup shell script (python_file mode only)
+    if setup_script_name and (ws / setup_script_name).exists():
+        steps.append(f"bash {setup_script_name}")
+
+    # 3. Main execution command
+    steps.append(execution_command)
+
+    execution_command = " && ".join(steps)
+
     # Build env vars dict
     env_dict = {ev.var_name: ev.var_value or "" for ev in env_vars}
 
-    # Determine network setting
-    job_cfg = job.job_config or {}
+    # Determine network setting (job_cfg already set above for setup_script_name)
     network_enabled = job_cfg.get("network_enabled", True)
 
     # ── Execute in Docker ─────────────────────────────
@@ -373,7 +409,7 @@ async def _execute_run(worker_id: uuid.UUID, run_id: uuid.UUID) -> None:
     )
 
     artifacts = await asyncio.get_event_loop().run_in_executor(
-        None, lambda: collect_artifacts(run_id, before_snapshot, after_snapshot, ws)
+        None, lambda: collect_artifacts(run_id, job.user_id, before_snapshot, after_snapshot, ws)
     )
 
     # Copy logs to NAS
@@ -431,7 +467,7 @@ async def _execute_run(worker_id: uuid.UUID, run_id: uuid.UUID) -> None:
                         job_run_id=run_id,
                         artifact_type=art["artifact_type"],
                         file_name=art["file_name"],
-                        file_path=art["file_path"],
+                        object_key=art["object_key"],
                         file_size_bytes=art["file_size_bytes"],
                         checksum_sha256=art["checksum_sha256"],
                     )
