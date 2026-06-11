@@ -147,22 +147,48 @@ Run once to register a compute node and GPU in the database. **Skip this if some
 source .venv/bin/activate
 python -c "
 import asyncio, uuid
+from sqlalchemy import select
 from app.database import async_session_factory
 from app.models import ComputeNode, GpuDevice
 
 async def seed():
     async with async_session_factory() as db:
         async with db.begin():
-            node = ComputeNode(
-                id=uuid.uuid4(), node_name='workstation', hostname='localhost',
-                total_gpus=1, total_cpu_cores=8, total_memory_mb=32768, is_active=True,
-            )
-            db.add(node)
-            await db.flush()
-            db.add(GpuDevice(
-                id=uuid.uuid4(), node_id=node.id, gpu_index=0,
-                gpu_model='NVIDIA RTX Titan', gpu_memory_mb=24576, status='available',
-            ))
+            # Check if compute node already exists
+            stmt = select(ComputeNode).where(ComputeNode.node_name == 'workstation')
+            node = (await db.execute(stmt)).scalars().first()
+            if not node:
+                node = ComputeNode(
+                    id=uuid.uuid4(), node_name='workstation', hostname='localhost',
+                    total_gpus=1, total_cpu_cores=8, total_memory_mb=32768, is_active=True,
+                )
+                db.add(node)
+                await db.flush()
+                print('Created compute node.')
+            else:
+                # Overwrite/update the existing node's configuration
+                node.hostname = 'localhost'
+                node.total_gpus = 1
+                node.total_cpu_cores = 8
+                node.total_memory_mb = 32768
+                node.is_active = True
+                print('Updated existing compute node properties.')
+
+            # Check if GPU device already exists
+            gpu_stmt = select(GpuDevice).where(GpuDevice.node_id == node.id, GpuDevice.gpu_index == 0)
+            gpu = (await db.execute(gpu_stmt)).scalars().first()
+            if not gpu:
+                db.add(GpuDevice(
+                    id=uuid.uuid4(), node_id=node.id, gpu_index=0,
+                    gpu_model='NVIDIA RTX Titan', gpu_memory_mb=24576, status='available',
+                ))
+                print('Created GPU device.')
+            else:
+                # Overwrite/update the existing GPU's configuration
+                gpu.gpu_model = 'NVIDIA RTX Titan'
+                gpu.gpu_memory_mb = 24576
+                gpu.status = 'available'
+                print('Updated existing GPU device properties.')
         print('Seeded.')
 
 asyncio.run(seed())

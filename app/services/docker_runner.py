@@ -306,14 +306,15 @@ class DockerRunner:
             # Writable tmpfs for areas that typically need writes
             tmpfs_size = settings.container_tmpfs_size_mb
             args += [
-                f"--tmpfs=/tmp:rw,noexec,nosuid,size={tmpfs_size}m",
+                f"--tmpfs=/tmp:rw,exec,nosuid,size={tmpfs_size}m",
                 "--tmpfs=/var/tmp:rw,noexec,nosuid,size=256m",
                 # pip --user installs to ~/.local — needs enough room for torch etc.
-                f"--tmpfs=/home:rw,noexec,nosuid,size={tmpfs_size}m",
+                f"--tmpfs=/home:rw,exec,nosuid,size={tmpfs_size}m",
             ]
-            # Redirect Python bytecode cache to /tmp (workspace is read-only).
-            # PYTHONPYCACHEPREFIX requires Python 3.8+.
             args += [
+                "-e", "USER=worker",
+                "-e", "LOGNAME=worker",
+                "-e", "HOME=/home",
                 "-e", "PYTHONDONTWRITEBYTECODE=1",
                 "-e", "PYTHONPYCACHEPREFIX=/tmp/__pycache__",
             ]
