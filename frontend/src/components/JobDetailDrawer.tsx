@@ -1,19 +1,18 @@
+import React from 'react';
 import {
   Drawer, Stack, Group, Text, Badge, Divider, Tabs,
-  ScrollArea, Code, Button, Loader, SimpleGrid, Paper, ActionIcon,
+  ScrollArea, Code, Button, SimpleGrid, Paper, Loader,
 } from '@mantine/core';
-import { Download, XCircle } from 'lucide-react';
-import { useJobEvents, useJobArtifacts, useJobLogs, useCancelJob } from '../hooks/useJobs';
+import { XCircle } from 'lucide-react';
+import { useJobEvents, useJobLogs, useCancelJob } from '../hooks/useJobs';
 import { StatusBadge } from './StatusBadge';
-import { fmtDate, fmtDuration, fmtBytes, shortId } from '../lib/format';
-import { jobsApi, type Job } from '../api/jobs';
-import type { StoredUser } from '../lib/auth';
+import { fmtDate, shortId } from '../lib/format';
+import type { Job } from '../api/jobs';
 
 interface Props {
   job: Job | null;
   opened: boolean;
   onClose: () => void;
-  currentUser: StoredUser | null;
 }
 
 const ACTIVE = new Set(['queued', 'scheduled', 'running']);
@@ -27,10 +26,9 @@ function StatCell({ label, value }: { label: string; value: React.ReactNode }) {
   );
 }
 
-export function JobDetailDrawer({ job, opened, onClose, currentUser }: Props) {
+export function JobDetailDrawer({ job, opened, onClose }: Props) {
   const isFinished = job ? !ACTIVE.has(job.status) : true;
   const { data: events = [], isLoading: eventsLoading } = useJobEvents(job?.id ?? null);
-  const { data: artifacts = [] } = useJobArtifacts(job?.id ?? null);
   const cancelJob = useCancelJob();
 
   return (
@@ -51,7 +49,6 @@ export function JobDetailDrawer({ job, opened, onClose, currentUser }: Props) {
         <Stack gap={0} h="100%">
           <ScrollArea flex={1} p="md">
             <Stack gap="md">
-              {/* Stat grid */}
               <SimpleGrid cols={3} spacing="sm">
                 <StatCell label="GPUs" value={`${job.requested_gpu_count} GPU${job.requested_gpu_count !== 1 ? 's' : ''}`} />
                 <StatCell label="Priority" value={job.priority} />
@@ -70,12 +67,10 @@ export function JobDetailDrawer({ job, opened, onClose, currentUser }: Props) {
 
               <Divider />
 
-              {/* Tabs */}
               <Tabs defaultValue="events">
                 <Tabs.List>
                   <Tabs.Tab value="events">Events</Tabs.Tab>
                   <Tabs.Tab value="logs">Logs</Tabs.Tab>
-                  <Tabs.Tab value="artifacts">Artifacts {artifacts.length > 0 && `(${artifacts.length})`}</Tabs.Tab>
                 </Tabs.List>
 
                 <Tabs.Panel value="events" pt="sm">
@@ -100,39 +95,10 @@ export function JobDetailDrawer({ job, opened, onClose, currentUser }: Props) {
                 <Tabs.Panel value="logs" pt="sm">
                   <LogsPanel jobId={job.id} isFinished={isFinished} />
                 </Tabs.Panel>
-
-                <Tabs.Panel value="artifacts" pt="sm">
-                  {artifacts.length === 0 ? (
-                    <Text size="sm" c="dimmed">No artifacts yet. Scripts should write outputs to <Code>/outputs</Code>.</Text>
-                  ) : (
-                    <Stack gap="xs">
-                      {artifacts.map((art) => (
-                        <Paper key={art.id} p="sm" radius="sm" withBorder>
-                          <Group justify="space-between">
-                            <div>
-                              <Text size="sm" fw={600}>{art.file_name}</Text>
-                              <Text size="xs" c="dimmed">{fmtBytes(art.file_size_bytes)} · {art.artifact_type}</Text>
-                            </div>
-                            <ActionIcon
-                              variant="subtle"
-                              component="a"
-                              href={`/api/jobs/${job.id}/artifacts/${art.id}/download`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                            >
-                              <Download size={16} />
-                            </ActionIcon>
-                          </Group>
-                        </Paper>
-                      ))}
-                    </Stack>
-                  )}
-                </Tabs.Panel>
               </Tabs>
             </Stack>
           </ScrollArea>
 
-          {/* Footer actions */}
           {ACTIVE.has(job.status) && (
             <>
               <Divider />
@@ -186,5 +152,3 @@ function LogsPanel({ jobId, isFinished }: { jobId: string; isFinished: boolean }
     </Stack>
   );
 }
-
-import React from 'react';

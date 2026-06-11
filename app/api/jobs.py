@@ -480,14 +480,22 @@ async def list_job_artifacts(
         return []
 
     from app.models import JobArtifact
+    from app.services.minio_client import presign_download
 
     result = await db.execute(
         select(JobArtifact)
         .where(JobArtifact.job_run_id == job.latest_run_id)
         .order_by(JobArtifact.created_at.asc())
     )
-    return [
-        JobArtifactResponse(
+    artifacts = result.scalars().all()
+
+    responses = []
+    for a in artifacts:
+        try:
+            url = presign_download(a.object_key, expires_in=900)
+        except Exception:
+            url = None
+        responses.append(JobArtifactResponse(
             id=a.id,
             job_run_id=a.job_run_id,
             artifact_type=a.artifact_type,
@@ -496,9 +504,9 @@ async def list_job_artifacts(
             file_size_bytes=a.file_size_bytes,
             checksum_sha256=a.checksum_sha256,
             created_at=a.created_at,
-        )
-        for a in result.scalars().all()
-    ]
+            download_url=url,
+        ))
+    return responses
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

@@ -46,6 +46,7 @@ export interface JobArtifact {
   file_size_bytes: number | null;
   checksum_sha256: string | null;
   created_at: string;
+  download_url: string | null;
 }
 
 export interface JobListResponse {

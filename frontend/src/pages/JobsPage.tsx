@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import {
   Stack, Group, Title, Button, Text, Table, Skeleton,
   Paper, ActionIcon, Tooltip,
@@ -140,7 +140,6 @@ export function JobsPage({ currentUser }: Props) {
         job={selectedJob}
         opened={drawerOpened}
         onClose={closeDrawer}
-        currentUser={currentUser}
       />
     </Stack>
   );

@@ -263,5 +263,6 @@ class JobArtifactResponse(BaseModel):
     file_size_bytes: Optional[int] = None
     checksum_sha256: Optional[str] = None
     created_at: datetime
+    download_url: Optional[str] = None  # presigned MinIO URL, populated when listing artifacts
 
     model_config = {"from_attributes": True}

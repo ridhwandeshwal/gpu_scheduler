@@ -1,7 +1,6 @@
-import React, { useState } from 'react';
 import {
   Stack, Title, Text, Paper, Group, ActionIcon,
-  Skeleton, Badge, Collapse, ThemeIcon, Tooltip,
+  Skeleton, Collapse, ThemeIcon, Tooltip,
   Divider,
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
@@ -11,9 +10,7 @@ import { fmtBytes, fmtDate, shortId } from '../lib/format';
 import { StatusBadge } from '../components/StatusBadge';
 import type { Job, JobArtifact } from '../api/jobs';
 
-const ARTIFACT_BASE = 'http://localhost:8000';
-
-function ArtifactRow({ jobId, artifact }: { jobId: string; artifact: JobArtifact }) {
+function ArtifactRow({ artifact }: { artifact: JobArtifact }) {
   return (
     <Group justify="space-between" px="sm" py={6} style={{ borderRadius: 4 }}
       styles={{ root: { '&:hover': { background: 'var(--mantine-color-dark-6)' } } }}
@@ -23,14 +20,15 @@ function ArtifactRow({ jobId, artifact }: { jobId: string; artifact: JobArtifact
         <Text size="sm" ff="monospace">{artifact.file_name}</Text>
         <Text size="xs" c="dimmed">{fmtBytes(artifact.file_size_bytes)}</Text>
       </Group>
-      <Tooltip label="Download" withArrow>
+      <Tooltip label={artifact.download_url ? 'Download' : 'URL unavailable'} withArrow>
         <ActionIcon
           variant="subtle"
           size="sm"
           component="a"
-          href={`${ARTIFACT_BASE}/jobs/${jobId}/artifacts/${artifact.id}/download`}
+          href={artifact.download_url ?? '#'}
           target="_blank"
           rel="noopener noreferrer"
+          disabled={!artifact.download_url}
         >
           <Download size={14} />
         </ActionIcon>
@@ -72,7 +70,7 @@ function JobFolder({ job }: { job: Job }) {
         </Group>
       </Group>
 
-      <Collapse in={opened}>
+      <Collapse expanded={opened}>
         <Divider />
         {isLoading ? (
           <Stack gap={4} p="sm">
@@ -83,7 +81,7 @@ function JobFolder({ job }: { job: Job }) {
         ) : (
           <Stack gap={0} py={4}>
             {artifacts.map((a) => (
-              <ArtifactRow key={a.id} jobId={job.id} artifact={a} />
+              <ArtifactRow key={a.id} artifact={a} />
             ))}
           </Stack>
         )}
