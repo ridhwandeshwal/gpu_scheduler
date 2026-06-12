@@ -31,20 +31,62 @@ export function JobDetailDrawer({ job, opened, onClose }: Props) {
   const { data: events = [], isLoading: eventsLoading } = useJobEvents(job?.id ?? null);
   const cancelJob = useCancelJob();
 
+  const [drawerWidth, setDrawerWidth] = React.useState(500);
+
+  const handleMouseDown = React.useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startWidth = drawerWidth;
+
+    const onMouseMove = (moveEvent: MouseEvent) => {
+      const newWidth = startWidth + (startX - moveEvent.clientX);
+      // Min 500px (current lg), Max 75vw
+      const clamped = Math.max(500, Math.min(newWidth, window.innerWidth * 0.75));
+      setDrawerWidth(clamped);
+    };
+
+    const onMouseUp = () => {
+      document.removeEventListener('mousemove', onMouseMove);
+      document.removeEventListener('mouseup', onMouseUp);
+      document.body.style.cursor = 'default';
+      document.body.style.userSelect = 'auto';
+    };
+
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseup', onMouseUp);
+  }, [drawerWidth]);
+
   return (
     <Drawer
       opened={opened}
       onClose={onClose}
       position="right"
-      size="lg"
+      size={drawerWidth}
       title={
-        <Group gap="sm">
+        <Group gap="sm" ml="sm">
           <Text fw={700} size="md">{job?.title ?? `Job ${shortId(job?.id ?? '')}`}</Text>
           {job && <StatusBadge status={job.status} />}
         </Group>
       }
       styles={{ body: { padding: 0 } }}
     >
+      <div
+        onMouseDown={handleMouseDown}
+        style={{
+          position: 'absolute',
+          top: 0,
+          bottom: 0,
+          left: 0,
+          width: '6px',
+          cursor: 'col-resize',
+          zIndex: 1000,
+          transition: 'background-color 0.15s ease',
+        }}
+        onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--mantine-color-dark-4)')}
+        onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+      />
       {!job ? null : (
         <Stack gap={0} h="100%">
           <ScrollArea flex={1} p="md">
