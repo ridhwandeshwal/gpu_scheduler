@@ -296,8 +296,11 @@ def collect_artifacts(
     out_dir = nas_output_dir(run_id)
     if out_dir.exists():
         for root, _dirs, files in os.walk(out_dir):
-            if "data" in Path(root).parts:
+            root_parts = Path(root).parts
+            if "data" in root_parts:
                 continue  # skip downloaded datasets
+            if ".pip-user" in root_parts:
+                continue  # skip pip-installed packages (not job outputs)
             for fname in files:
                 full_path = Path(root) / fname
                 sha256 = _file_sha256(full_path)

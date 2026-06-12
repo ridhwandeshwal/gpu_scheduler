@@ -308,15 +308,18 @@ class DockerRunner:
             args += [
                 f"--tmpfs=/tmp:rw,exec,nosuid,size={tmpfs_size}m",
                 "--tmpfs=/var/tmp:rw,noexec,nosuid,size=256m",
-                # pip --user installs to ~/.local — needs enough room for torch etc.
-                f"--tmpfs=/home:rw,exec,nosuid,size={tmpfs_size}m",
             ]
             args += [
                 "-e", "USER=worker",
                 "-e", "LOGNAME=worker",
-                "-e", "HOME=/home",
+                # HOME→/tmp so pip's cache lookup resolves to the tmpfs we own,
+                # fixing the '/home/.cache/pip not writable' warning.
+                "-e", "HOME=/tmp",
                 "-e", "PYTHONDONTWRITEBYTECODE=1",
                 "-e", "PYTHONPYCACHEPREFIX=/tmp/__pycache__",
+                # Packages are installed to disk (/outputs/.pip-user) so Python
+                # needs this on its search path at runtime.
+                "-e", "PYTHONPATH=/outputs/.pip-user/lib/python3.11/site-packages",
             ]
 
         # ── Resource limits ───────────────────────────────

@@ -26,6 +26,7 @@ import logging
 import platform
 import uuid
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Optional
 
 from sqlalchemy import select
@@ -345,9 +346,11 @@ async def _execute_run(worker_id: uuid.UUID, run_id: uuid.UUID) -> None:
     steps: list[str] = []
 
     # 1. pip install (if requirements.txt present)
-    # --user + PYTHONUSERBASE=/tmp/.pip-user because the container runs as
-    # non-root (1000:1000) with a read-only root filesystem; /tmp is a tmpfs.
-    pip_prefix = "export PYTHONUSERBASE=/tmp/.pip-user && pip install -q --user -r"
+    # Install to /outputs/.pip-user (disk-backed NAS bind mount, NOT tmpfs) so
+    # large packages like PyTorch don't consume the container's RAM.
+    # PYTHONPATH=/outputs/.pip-user/lib/python3.11/site-packages is injected by
+    # docker_runner so Python can find packages at that location.
+    pip_prefix = "export PYTHONUSERBASE=/outputs/.pip-user && pip install -q --no-cache-dir --user -r"
     if job_input.source_type == "github_repo" and job_input.requirements_file_path:
         if (ws / job_input.requirements_file_path).exists():
             steps.append(f"{pip_prefix} {job_input.requirements_file_path}")
@@ -380,7 +383,7 @@ async def _execute_run(worker_id: uuid.UUID, run_id: uuid.UUID) -> None:
         logs_dir=logs_dir(run_id),
         execution_command=execution_command,
         container_image=job_run.container_image or settings.default_container_image,
-        memory_mb=job.requested_memory_mb or 4096,
+        memory_mb=job.requested_memory_mb or 8192,
         cpu_cores=job.requested_cpu_cores or 2,
         env_vars=env_dict,
         gpu_devices=gpu_devices_info,
