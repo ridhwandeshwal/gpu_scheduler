@@ -22,12 +22,13 @@ const ACTIVE = new Set(['queued', 'scheduled', 'running']);
 export function JobsPage({ currentUser }: Props) {
   const { data: jobs = [], isLoading, refetch } = useJobs();
   const cancelJob = useCancelJob();
-  const [selectedJob, setSelectedJob] = useState<Job | null>(null);
+  const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
+  const selectedJob = jobs.find((j) => j.id === selectedJobId) ?? null;
   const [drawerOpened, { open: openDrawer, close: closeDrawer }] = useDisclosure(false);
   const [formOpened, { toggle: toggleForm }] = useDisclosure(false);
 
   function openJob(job: Job) {
-    setSelectedJob(job);
+    setSelectedJobId(job.id);
     openDrawer();
   }
 

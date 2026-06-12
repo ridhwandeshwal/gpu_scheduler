@@ -1,6 +1,6 @@
 import React from 'react';
 import {
-  Drawer, Stack, Group, Text, Badge, Divider, Tabs,
+  Drawer, Stack, Group, Text, Divider, Tabs,
   ScrollArea, Code, Button, SimpleGrid, Paper, Loader,
 } from '@mantine/core';
 import { XCircle } from 'lucide-react';
@@ -163,34 +163,43 @@ export function JobDetailDrawer({ job, opened, onClose }: Props) {
   );
 }
 
+function processLog(raw: string): string {
+  // Strip ANSI escape sequences (colors, cursor movements, etc.)
+  const stripped = raw.replace(/\x1b\[[0-9;?]*[a-zA-Z]/g, '').replace(/\x1b[()][0-9A-Za-z]/g, '');
+  // Process each line: simulate \r (carriage return) and \b (backspace)
+  return stripped
+    .split('\n')
+    .map(line => {
+      const buf: string[] = [];
+      let pos = 0;
+      for (const ch of line) {
+        if (ch === '\r') {
+          pos = 0;
+        } else if (ch === '\b') {
+          if (pos > 0) pos--;
+        } else {
+          if (pos < buf.length) buf[pos] = ch; else buf.push(ch);
+          pos++;
+        }
+      }
+      return buf.join('').trimEnd();
+    })
+    .join('\n')
+    .trimEnd();
+}
+
 function LogsPanel({ jobId, isFinished }: { jobId: string; isFinished: boolean }) {
-  const [logType, setLogType] = React.useState<'stdout' | 'stderr' | 'combined'>('stdout');
-  const { data: logs, isLoading, isError } = useJobLogs(jobId, logType, isFinished);
+  const { data: logs, isLoading, isError } = useJobLogs(jobId, 'combined', isFinished);
 
   return (
-    <Stack gap="sm">
-      <Group gap="xs">
-        {(['stdout', 'stderr', 'combined'] as const).map((t) => (
-          <Badge
-            key={t}
-            variant={logType === t ? 'filled' : 'outline'}
-            color="gray"
-            style={{ cursor: 'pointer' }}
-            onClick={() => setLogType(t)}
-          >
-            {t}
-          </Badge>
-        ))}
-      </Group>
-      <ScrollArea h={320}>
-        <Code block style={{ fontSize: 11, lineHeight: 1.6, whiteSpace: 'pre-wrap', wordBreak: 'break-all', background: '#0a0b0d', color: '#a7f3d0' }}>
-          {isLoading
-            ? 'Loading...'
-            : isError
-            ? 'Logs not available yet.'
-            : logs ?? '(empty)'}
-        </Code>
-      </ScrollArea>
-    </Stack>
+    <ScrollArea h={340}>
+      <Code block style={{ fontSize: 11, lineHeight: 1.6, whiteSpace: 'pre-wrap', wordBreak: 'break-all', background: '#0a0b0d', color: '#a7f3d0' }}>
+        {isLoading
+          ? 'Loading...'
+          : isError
+          ? 'Logs not available yet.'
+          : logs ? processLog(logs) : '(empty)'}
+      </Code>
+    </ScrollArea>
   );
 }
