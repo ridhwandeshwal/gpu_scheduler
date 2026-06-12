@@ -59,7 +59,12 @@ export function JobsPage({ currentUser }: Props) {
       {/* Submit form */}
       {formOpened && (
         <Paper p="lg" radius="md" withBorder>
-          <Title order={5} mb="md">Submit New Job</Title>
+          <Title order={5} mb="md">
+            Submit New Job{' '}
+            <Text component="span" size="sm" c="dimmed" fw="normal">
+              (download datasets to <code>./data</code>)
+            </Text>
+          </Title>
           <SubmitJobForm currentUser={currentUser} onSuccess={() => toggleForm()} />
         </Paper>
       )}

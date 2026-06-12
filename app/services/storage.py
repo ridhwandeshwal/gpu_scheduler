@@ -114,6 +114,9 @@ def prepare_workspace(
 
     nas_out = nas_output_dir(run_id)
     nas_out.mkdir(parents=True, exist_ok=True)
+    
+    nas_out_data = nas_out / "data"
+    nas_out_data.mkdir(parents=True, exist_ok=True)
 
     nas_art = nas_artifacts_dir(run_id)
     nas_art.mkdir(parents=True, exist_ok=True)
@@ -141,6 +144,22 @@ def prepare_workspace(
         )
     else:
         raise ValueError(f"Unknown source_type: {source_type}")
+
+    # Set up the data directory symlink so users can save to ./data
+    data_symlink = ws / "data"
+    try:
+        if data_symlink.is_symlink():
+            data_symlink.unlink()
+            os.symlink("/outputs/data", data_symlink)
+        elif data_symlink.is_dir():
+            for item in data_symlink.iterdir():
+                shutil.move(str(item), str(nas_out_data / item.name))
+            data_symlink.rmdir()
+            os.symlink("/outputs/data", data_symlink)
+        elif not data_symlink.exists():
+            os.symlink("/outputs/data", data_symlink)
+    except Exception as e:
+        logger.warning(f"Failed to setup data directory symlink: {e}")
 
     return ws
 
@@ -247,6 +266,8 @@ def snapshot_workspace(workspace: Path) -> dict[str, str]:
 
         for fname in files:
             full_path = Path(root) / fname
+            if full_path.is_symlink():
+                continue
             rel_path = str(full_path.relative_to(workspace))
             sha256 = _file_sha256(full_path)
             snapshot[rel_path] = sha256

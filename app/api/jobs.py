@@ -575,24 +575,18 @@ async def cancel_job(
         job.status = "cancelled"
         job.finished_at = now
 
-        # Try to stop the Docker container
-        container_id: str | None = None
+        # Cancel the run and release GPUs
         if job.latest_run_id:
-            run_result = await db.execute(
-                select(JobRun).where(JobRun.id == job.latest_run_id)
-            )
-            run = run_result.scalars().first()
-            if run:
-                container_id = run.container_id
             await _cancel_run_and_release_gpus(db, job.latest_run_id, now)
 
         await _insert_event(db, job_id, "job_cancelled", "Job cancelled while running")
         await db.flush()
 
         # Attempt container stop (best-effort, non-blocking)
-        if container_id:
+        if job.latest_run_id:
             import asyncio
-            asyncio.create_task(_stop_container(container_id))
+            container_name = f"gpu-job-{job.latest_run_id}"
+            asyncio.create_task(_stop_container(container_name))
 
         return MessageResponse(message="Job cancellation initiated")
 

@@ -435,13 +435,22 @@ async def _execute_run(worker_id: uuid.UUID, run_id: uuid.UUID) -> None:
         async with db.begin():
             now = datetime.now(timezone.utc)
 
+            # Check if job was cancelled
+            job_db_result = await db.execute(
+                select(Job).where(Job.id == job.id)
+            )
+            job_db = job_db_result.scalars().first()
+            if job_db and job_db.status == "cancelled":
+                final_status = "cancelled"
+
             # Update job_run
             run_result_db = await db.execute(
                 select(JobRun).where(JobRun.id == run_id)
             )
             job_run_db = run_result_db.scalars().first()
             if job_run_db:
-                job_run_db.status = final_status
+                if job_run_db.status != "cancelled":
+                    job_run_db.status = final_status
                 job_run_db.finished_at = now
                 job_run_db.exit_code = result.exit_code
                 job_run_db.duration_seconds = result.duration_seconds
@@ -453,15 +462,12 @@ async def _execute_run(worker_id: uuid.UUID, run_id: uuid.UUID) -> None:
                 job_run_db.error_message = result.error_message
 
             # Update job
-            job_db_result = await db.execute(
-                select(Job).where(Job.id == job.id)
-            )
-            job_db = job_db_result.scalars().first()
             if job_db:
-                job_db.status = final_status
-                job_db.finished_at = now
-                if result.error_message and final_status == "failed":
-                    job_db.failure_reason = result.error_message
+                if job_db.status != "cancelled":
+                    job_db.status = final_status
+                    job_db.finished_at = now
+                    if result.error_message and final_status == "failed":
+                        job_db.failure_reason = result.error_message
 
             # Insert artifacts
             for art in artifacts:
@@ -495,23 +501,26 @@ async def _execute_run(worker_id: uuid.UUID, run_id: uuid.UUID) -> None:
                     gpu.current_job_run_id = None
 
             # Events
-            event_type = "run_completed" if final_status == "completed" else "run_failed"
-            db.add(
-                JobEvent(
-                    job_id=job.id,
-                    job_run_id=run_id,
-                    event_type="gpu_released",
-                    event_message=f"Released {len(allocations)} GPU(s)",
+            if allocations:
+                db.add(
+                    JobEvent(
+                        job_id=job.id,
+                        job_run_id=run_id,
+                        event_type="gpu_released",
+                        event_message=f"Released {len(allocations)} GPU(s)",
+                    )
                 )
-            )
-            db.add(
-                JobEvent(
-                    job_id=job.id,
-                    job_run_id=run_id,
-                    event_type=event_type,
-                    event_message=f"Run {final_status} (exit={result.exit_code})",
+
+            if final_status != "cancelled":
+                event_type = "run_completed" if final_status == "completed" else "run_failed"
+                db.add(
+                    JobEvent(
+                        job_id=job.id,
+                        job_run_id=run_id,
+                        event_type=event_type,
+                        event_message=f"Run {final_status} (exit={result.exit_code})",
+                    )
                 )
-            )
 
             # Reset worker
             worker_result = await db.execute(
