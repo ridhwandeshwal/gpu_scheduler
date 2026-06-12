@@ -210,13 +210,15 @@ def _prepare_github_repo(
 
     # Verify entrypoint exists
     if entrypoint:
-        entry_path = workspace
-        if repo_subdir:
-            validated_subdir = validate_repo_path(repo_subdir)
-            entry_path = workspace / validated_subdir
-
         validated_entry = validate_repo_path(entrypoint)
-        full_entry_path = workspace / validated_entry
+
+        # Handle module notation (e.g. "package.train") — convert to file path for check
+        if "." in validated_entry and "/" not in validated_entry and not validated_entry.endswith((".py", ".sh")):
+            entry_file = validated_entry.replace(".", "/") + ".py"
+        else:
+            entry_file = validated_entry
+
+        full_entry_path = workspace / entry_file
 
         if not full_entry_path.exists():
             raise FileNotFoundError(

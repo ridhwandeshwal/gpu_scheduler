@@ -77,6 +77,7 @@ export interface SubmitGithubJobPayload {
   repo_commit_hash?: string;
   repo_subdir?: string;
   entrypoint: string;
+  run_as_module?: boolean;
   requirements_file_path?: string;
   title?: string;
   description?: string;
@@ -135,6 +136,7 @@ export const jobsApi = {
       repo_commit_hash: payload.repo_commit_hash || null,
       repo_subdir: payload.repo_subdir || null,
       entrypoint: payload.entrypoint,
+      run_as_module: payload.run_as_module ?? false,
       requirements_file_path: payload.requirements_file_path || null,
       title: payload.title || null,
       description: payload.description || null,

@@ -36,6 +36,7 @@ export function SubmitJobForm({ currentUser, onSuccess }: Props) {
   const [repoSubdir, setRepoSubdir] = useState('');
   const [entrypoint, setEntrypoint] = useState('');
   const [repoRequirementsPath, setRepoRequirementsPath] = useState('');
+  const [runAsModule, setRunAsModule] = useState(false);
 
   const isAdmin = currentUser?.role === 'admin';
   const isPending = submitFile.isPending || submitGithub.isPending;
@@ -57,7 +58,7 @@ export function SubmitJobForm({ currentUser, onSuccess }: Props) {
   function resetForm() {
     setTitle(''); setDescription(''); setGpuCount(1); setPriority(5);
     setEnvVars([]); setUploadFile(null); setSetupScript(null); setRequirementsFile(null); setRepoUrl(''); setRepoBranch('main');
-    setCommitHash(''); setRepoSubdir(''); setEntrypoint(''); setRepoRequirementsPath('');
+    setCommitHash(''); setRepoSubdir(''); setEntrypoint(''); setRepoRequirementsPath(''); setRunAsModule(false);
   }
 
   async function handleFileSubmit(e: React.FormEvent) {
@@ -77,6 +78,7 @@ export function SubmitJobForm({ currentUser, onSuccess }: Props) {
       repo_commit_hash: commitHash || undefined,
       repo_subdir: repoSubdir || undefined,
       entrypoint,
+      run_as_module: runAsModule,
       requirements_file_path: repoRequirementsPath || undefined,
     });
     resetForm();
@@ -233,8 +235,21 @@ export function SubmitJobForm({ currentUser, onSuccess }: Props) {
             />
             <Group grow>
               <TextInput label="Branch" placeholder="main" value={repoBranch} onChange={(e) => setRepoBranch(e.currentTarget.value)} />
-              <TextInput label="Entrypoint" placeholder="scripts/train.py" value={entrypoint} onChange={(e) => setEntrypoint(e.currentTarget.value)} required />
+              <TextInput
+                label="Entrypoint"
+                placeholder={runAsModule ? 'package.train' : 'scripts/train.py'}
+                description={runAsModule ? 'Module path (dots) or file path — both accepted' : undefined}
+                value={entrypoint}
+                onChange={(e) => setEntrypoint(e.currentTarget.value)}
+                required
+              />
             </Group>
+            <Switch
+              label="Run as module (python -m)"
+              description="Use when your code has relative imports (from .utils import …)"
+              checked={runAsModule}
+              onChange={(e) => setRunAsModule(e.currentTarget.checked)}
+            />
             <Group grow>
               <TextInput label="Subdirectory (optional)" placeholder="src" value={repoSubdir} onChange={(e) => setRepoSubdir(e.currentTarget.value)} />
               <TextInput label="Commit Hash (optional)" placeholder="Latest if blank" value={commitHash} onChange={(e) => setCommitHash(e.currentTarget.value)} />

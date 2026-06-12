@@ -75,6 +75,20 @@ def _determine_command(file_path: str) -> str:
         )
 
 
+def _entrypoint_to_module(entrypoint: str) -> str:
+    """Convert a file-path-style entrypoint to a Python module path.
+
+    Examples:
+        'package/sub/train.py'  -> 'package.sub.train'
+        'train.py'              -> 'train'
+        'package.sub.train'     -> 'package.sub.train'  (already module notation)
+    """
+    if "/" not in entrypoint and "\\" not in entrypoint:
+        # Already module notation (or bare name) — strip .py if present
+        return entrypoint.removesuffix(".py")
+    return entrypoint.replace("\\", "/").replace("/", ".").removesuffix(".py")
+
+
 def _compute_sha256(data: bytes) -> str:
     """Compute SHA-256 hex digest of file content."""
     return hashlib.sha256(data).hexdigest()
@@ -276,7 +290,10 @@ async def submit_github_job(
     basename = os.path.basename(entrypoint)
 
     # Determine execution command
-    command_text = _determine_command(entrypoint)
+    if body.run_as_module:
+        command_text = f"python -m {_entrypoint_to_module(entrypoint)}"
+    else:
+        command_text = _determine_command(entrypoint)
 
     job_id = uuid_mod.uuid4()
     now = datetime.now(timezone.utc)
@@ -296,7 +313,7 @@ async def submit_github_job(
         requested_memory_mb=body.requested_memory_mb,
         max_runtime_seconds=body.max_runtime_seconds,
         entry_type="github_repo",
-        job_config=body.job_config,
+        job_config={**(body.job_config or {}), "run_as_module": body.run_as_module},
         submitted_at=now,
     )
     db.add(job)

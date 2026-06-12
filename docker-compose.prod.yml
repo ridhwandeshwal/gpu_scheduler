@@ -1,0 +1,136 @@
+services:
+
+  # ── Infrastructure ─────────────────────────────────────
+
+  redis:
+    image: redis:7-alpine
+    container_name: quda_redis
+    restart: unless-stopped
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  minio:
+    image: minio/minio:latest
+    container_name: quda_minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    ports:
+      - "127.0.0.1:9100:9000"   # S3 API — local only, not exposed externally
+      - "127.0.0.1:9101:9001"   # MinIO web console — local only
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY}
+    volumes:
+      - miniodata:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Application ────────────────────────────────────────
+
+  api:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.app
+    container_name: quda_api
+    restart: unless-stopped
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 2
+    env_file: .env
+    environment:
+      UPLOAD_ROOT: /app/uploads
+      JOBS_ROOT: /app/jobs
+      NAS_ROOT: /app/nas
+      MINIO_ENDPOINT: http://minio:9000   # internal Docker network address
+    volumes:
+      - uploads:/app/uploads
+      - jobs:/app/jobs
+      - nas:/app/nas
+    depends_on:
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+
+  scheduler:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.app
+    container_name: quda_scheduler
+    restart: unless-stopped
+    command: python -m app.services.scheduler
+    env_file: .env
+    depends_on:
+      redis:
+        condition: service_healthy
+      api:
+        condition: service_started
+
+  worker:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.worker
+    container_name: quda_worker
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      UPLOAD_ROOT: /app/uploads
+      JOBS_ROOT: /app/jobs
+      NAS_ROOT: /app/nas
+      MINIO_ENDPOINT: http://minio:9000
+      # ── Docker socket ──────────────────────────────────
+      # Standard Docker (default): uncomment the volume below and leave DOCKER_HOST unset.
+      # Rootless Docker: comment the standard volume, uncomment rootless volume + DOCKER_HOST.
+      # DOCKER_HOST: unix:///run/user/1000/docker.sock
+    volumes:
+      - uploads:/app/uploads
+      - jobs:/app/jobs
+      - nas:/app/nas
+      # Standard Docker socket:
+      - /var/run/docker.sock:/var/run/docker.sock
+      # Rootless Docker socket (replace 1000 with output of `id -u`):
+      # - /run/user/1000/docker.sock:/run/user/1000/docker.sock
+    depends_on:
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.frontend
+    container_name: quda_frontend
+    restart: unless-stopped
+    # Only nginx is exposed externally. cloudflared routes traffic here.
+    ports:
+      - "127.0.0.1:80:80"
+    depends_on:
+      - api
+
+  # ── Cloudflare Tunnel ──────────────────────────────────
+  # Routes public traffic to nginx without opening firewall ports.
+  # Setup: https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/
+  # 1. Create a tunnel at dash.cloudflare.com → Zero Trust → Networks → Tunnels
+  # 2. Copy the tunnel token and set CLOUDFLARE_TUNNEL_TOKEN in .env
+  # 3. In the Cloudflare dashboard, add a Public Hostname routing to http://frontend:80
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: quda_cloudflared
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN}
+    depends_on:
+      - frontend
+
+volumes:
+  redisdata:
+  miniodata:
+  uploads:
+  jobs:
+  nas:

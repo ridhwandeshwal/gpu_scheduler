@@ -99,6 +99,10 @@ class GitHubJobRequest(BaseModel):
     queue_name: str = Field("default", max_length=64)
     env_vars: list[EnvVarInput] = Field(default_factory=list)
     job_config: Optional[dict[str, Any]] = None
+    run_as_module: bool = Field(
+        False,
+        description="Run entrypoint with `python -m` instead of `python`. Required when the repo uses relative imports.",
+    )
     requirements_file_path: Optional[str] = Field(
         None,
         max_length=512,
