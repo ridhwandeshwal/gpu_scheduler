@@ -77,7 +77,7 @@ function JobFolder({ job }: { job: Job }) {
             {[1, 2, 3].map((i) => <Skeleton key={i} h={28} radius="sm" />)}
           </Stack>
         ) : artifacts.length === 0 ? (
-          <Text size="sm" c="dimmed" p="sm">No artifacts — script may not have written to /outputs.</Text>
+          <Text size="sm" c="dimmed" p="sm">No artifacts - script may not have written to /outputs.</Text>
         ) : (
           <Stack gap={0} py={4}>
             {artifacts.map((a) => (
@@ -101,7 +101,7 @@ export function ArtifactsPage() {
       <div>
         <Title order={3}>Artifacts</Title>
         <Text size="sm" c="dimmed" mt={2}>
-          Output files from completed runs — click a job to browse its files
+          Output files from completed runs; click a job to browse its files
         </Text>
       </div>
 

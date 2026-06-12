@@ -1,5 +1,5 @@
 export function fmtDate(iso: string | null | undefined): string {
-  if (!iso) return '—';
+  if (!iso) return '-';
   return new Date(iso).toLocaleString(undefined, {
     month: 'short', day: 'numeric',
     hour: '2-digit', minute: '2-digit',
@@ -7,7 +7,7 @@ export function fmtDate(iso: string | null | undefined): string {
 }
 
 export function fmtDuration(seconds: number | null | undefined): string {
-  if (seconds == null) return '—';
+  if (seconds == null) return '-';
   if (seconds < 60) return `${seconds.toFixed(1)}s`;
   const m = Math.floor(seconds / 60);
   const s = Math.round(seconds % 60);
@@ -15,7 +15,7 @@ export function fmtDuration(seconds: number | null | undefined): string {
 }
 
 export function fmtBytes(bytes: number | null | undefined): string {
-  if (bytes == null) return '—';
+  if (bytes == null) return '-';
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;

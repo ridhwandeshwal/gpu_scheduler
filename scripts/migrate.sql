@@ -1,16 +1,12 @@
--- GPU Job Scheduler — Neon migration script
--- Idempotent: safe to run multiple times against an existing database.
--- Uses CREATE TABLE IF NOT EXISTS and CREATE INDEX IF NOT EXISTS throughout.
--- Run against your Neon project with:
---   psql "$DATABASE_URL" -f scripts/migrate_neon.sql
+-- GPU Job Scheduler - idempotent migration for local PostgreSQL
+-- Safe to run multiple times against an existing database.
+--
+-- Usage:
+--   psql "$DATABASE_URL" -f scripts/migrate.sql
 
--- Neon provides gen_random_uuid() via pgcrypto by default.
--- uuid-ossp is available on Neon but gen_random_uuid() is preferred.
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
--- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 -- Users & Sessions
--- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 CREATE TABLE IF NOT EXISTS users (
     id                    UUID        PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -42,9 +38,7 @@ CREATE TABLE IF NOT EXISTS user_sessions (
 CREATE INDEX IF NOT EXISTS idx_user_sessions_token_hash ON user_sessions(session_token_hash);
 CREATE INDEX IF NOT EXISTS idx_user_sessions_user_id    ON user_sessions(user_id);
 
--- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 -- Infrastructure
--- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 CREATE TABLE IF NOT EXISTS compute_nodes (
     id                UUID        PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -89,9 +83,7 @@ CREATE TABLE IF NOT EXISTS gpu_devices (
 CREATE INDEX IF NOT EXISTS idx_gpu_devices_status  ON gpu_devices(status);
 CREATE INDEX IF NOT EXISTS idx_gpu_devices_node_id ON gpu_devices(node_id);
 
--- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 -- Jobs
--- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 CREATE TABLE IF NOT EXISTS jobs (
     id                  UUID        PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -166,9 +158,7 @@ CREATE TABLE IF NOT EXISTS job_env_vars (
 
 CREATE INDEX IF NOT EXISTS idx_job_env_vars_job_id ON job_env_vars(job_id);
 
--- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 -- Job Runs
--- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 CREATE TABLE IF NOT EXISTS job_runs (
     id                UUID        PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -195,9 +185,7 @@ CREATE TABLE IF NOT EXISTS job_runs (
 CREATE INDEX IF NOT EXISTS idx_job_runs_job_id ON job_runs(job_id);
 CREATE INDEX IF NOT EXISTS idx_job_runs_status ON job_runs(status);
 
--- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 -- Job Events
--- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 CREATE TABLE IF NOT EXISTS job_events (
     id            UUID        PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -212,9 +200,7 @@ CREATE TABLE IF NOT EXISTS job_events (
 CREATE INDEX IF NOT EXISTS idx_job_events_job_id ON job_events(job_id);
 CREATE INDEX IF NOT EXISTS idx_job_events_type   ON job_events(event_type);
 
--- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 -- Job Artifacts
--- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 CREATE TABLE IF NOT EXISTS job_artifacts (
     id              UUID        PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -230,9 +216,7 @@ CREATE TABLE IF NOT EXISTS job_artifacts (
 
 CREATE INDEX IF NOT EXISTS idx_job_artifacts_run_id ON job_artifacts(job_run_id);
 
--- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 -- GPU Allocations
--- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 CREATE TABLE IF NOT EXISTS job_run_gpu_allocations (
     id            UUID        PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -240,7 +224,7 @@ CREATE TABLE IF NOT EXISTS job_run_gpu_allocations (
     gpu_device_id UUID        NOT NULL REFERENCES gpu_devices(id) ON DELETE CASCADE,
     allocated_at  TIMESTAMPTZ,
     released_at   TIMESTAMPTZ,
-    created_at    TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE INDEX IF NOT EXISTS idx_gpu_alloc_run_id ON job_run_gpu_allocations(job_run_id);

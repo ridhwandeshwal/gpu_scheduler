@@ -1,12 +1,11 @@
 """
-Neon migration script — creates all GPU scheduler tables idempotently.
+Idempotent migration script for local PostgreSQL.
 
 Usage:
-    python scripts/migrate_neon.py
+    python scripts/migrate.py
 
-Reads DATABASE_URL from .env in the project root. Accepts both the
-libpq form (postgresql://) and the asyncpg form (postgresql+asyncpg://).
-Requires: asyncpg, python-dotenv  (both already in requirements.txt / venv)
+Reads DATABASE_URL from .env in the project root.
+Requires: asyncpg  (already in requirements.txt / venv)
 """
 
 from __future__ import annotations
@@ -17,8 +16,6 @@ import re
 import sys
 from pathlib import Path
 
-# ── Load .env from project root ───────────────────────────────────────────────
-
 _env_path = Path(__file__).parent.parent / ".env"
 if _env_path.exists():
     for line in _env_path.read_text().splitlines():
@@ -28,27 +25,15 @@ if _env_path.exists():
         key, _, val = line.partition("=")
         os.environ.setdefault(key.strip(), val.strip())
 
-# ── Resolve DATABASE_URL → raw asyncpg DSN ───────────────────────────────────
-
 _raw = os.environ.get("DATABASE_URL", "")
 if not _raw:
     sys.exit("ERROR: DATABASE_URL is not set in .env or environment.")
 
-# Strip SQLAlchemy driver prefix if present, then force ssl=require for Neon.
 _dsn = re.sub(r"^postgresql\+asyncpg://", "postgresql://", _raw)
-if "neon.tech" in _dsn and "ssl" not in _dsn and "sslmode" not in _dsn:
-    sep = "&" if "?" in _dsn else "?"
-    _dsn += f"{sep}ssl=require"
-# asyncpg uses ssl=require, not sslmode=require
-_dsn = _dsn.replace("sslmode=require", "ssl=require")
-
-# ── DDL statements (all idempotent) ──────────────────────────────────────────
 
 _STATEMENTS = [
-    # Extension
     'CREATE EXTENSION IF NOT EXISTS "uuid-ossp"',
 
-    # ── Users & Sessions ──────────────────────────────────────────────────────
     """
     CREATE TABLE IF NOT EXISTS users (
         id                    UUID        PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -81,7 +66,6 @@ _STATEMENTS = [
     "CREATE INDEX IF NOT EXISTS idx_user_sessions_token_hash ON user_sessions(session_token_hash)",
     "CREATE INDEX IF NOT EXISTS idx_user_sessions_user_id    ON user_sessions(user_id)",
 
-    # ── Infrastructure ────────────────────────────────────────────────────────
     """
     CREATE TABLE IF NOT EXISTS compute_nodes (
         id                UUID         PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -128,7 +112,6 @@ _STATEMENTS = [
     "CREATE INDEX IF NOT EXISTS idx_gpu_devices_status  ON gpu_devices(status)",
     "CREATE INDEX IF NOT EXISTS idx_gpu_devices_node_id ON gpu_devices(node_id)",
 
-    # ── Jobs ──────────────────────────────────────────────────────────────────
     """
     CREATE TABLE IF NOT EXISTS jobs (
         id                  UUID         PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -203,7 +186,6 @@ _STATEMENTS = [
     """,
     "CREATE INDEX IF NOT EXISTS idx_job_env_vars_job_id ON job_env_vars(job_id)",
 
-    # ── Job Runs ──────────────────────────────────────────────────────────────
     """
     CREATE TABLE IF NOT EXISTS job_runs (
         id                UUID         PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -230,7 +212,6 @@ _STATEMENTS = [
     "CREATE INDEX IF NOT EXISTS idx_job_runs_job_id ON job_runs(job_id)",
     "CREATE INDEX IF NOT EXISTS idx_job_runs_status ON job_runs(status)",
 
-    # ── Job Events ────────────────────────────────────────────────────────────
     """
     CREATE TABLE IF NOT EXISTS job_events (
         id            UUID        PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -245,7 +226,6 @@ _STATEMENTS = [
     "CREATE INDEX IF NOT EXISTS idx_job_events_job_id ON job_events(job_id)",
     "CREATE INDEX IF NOT EXISTS idx_job_events_type   ON job_events(event_type)",
 
-    # ── Job Artifacts ─────────────────────────────────────────────────────────
     """
     CREATE TABLE IF NOT EXISTS job_artifacts (
         id              UUID          PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -261,7 +241,6 @@ _STATEMENTS = [
     """,
     "CREATE INDEX IF NOT EXISTS idx_job_artifacts_run_id ON job_artifacts(job_run_id)",
 
-    # ── GPU Allocations ───────────────────────────────────────────────────────
     """
     CREATE TABLE IF NOT EXISTS job_run_gpu_allocations (
         id            UUID        PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -276,7 +255,6 @@ _STATEMENTS = [
     "CREATE INDEX IF NOT EXISTS idx_gpu_alloc_gpu_id ON job_run_gpu_allocations(gpu_device_id)",
 ]
 
-# ── Runner ────────────────────────────────────────────────────────────────────
 
 async def migrate() -> None:
     try:

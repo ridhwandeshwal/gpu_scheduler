@@ -4,7 +4,7 @@ import {
   Paper, ActionIcon, Tooltip,
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
-import { Plus, RefreshCw, XCircle } from 'lucide-react';
+import { Plus, Minus, RefreshCw, XCircle } from 'lucide-react';
 import { useJobs, useCancelJob } from '../hooks/useJobs';
 import { StatusBadge } from '../components/StatusBadge';
 import { JobDetailDrawer } from '../components/JobDetailDrawer';
@@ -49,7 +49,7 @@ export function JobsPage({ currentUser }: Props) {
               <RefreshCw size={16} />
             </ActionIcon>
           </Tooltip>
-          <Button leftSection={<Plus size={16} />} onClick={toggleForm} variant={formOpened ? 'filled' : 'light'}>
+          <Button leftSection={formOpened ? <Minus size={16} /> : <Plus size={16} />} onClick={toggleForm} variant={formOpened ? 'filled' : 'light'}>
             {formOpened ? 'Close' : 'New Job'}
           </Button>
         </Group>

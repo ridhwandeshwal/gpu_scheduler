@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import {
   Stack, Tabs, TextInput, Textarea, Select,
   Group, Button, ActionIcon, Switch, Divider, Slider, Badge,
-  FileInput, Text,
+  FileInput, Text, Box,
 } from '@mantine/core';
 import { Plus, Trash2, Play } from 'lucide-react';
 import { useSubmitFileJob, useSubmitGithubJob } from '../hooks/useJobs';
@@ -105,7 +105,7 @@ export function SubmitJobForm({ currentUser, onSuccess }: Props) {
           value={String(gpuCount)}
           onChange={(v) => setGpuCount(Number(v ?? 1))}
           data={[
-            { value: '0', label: '0 — CPU only' },
+            { value: '0', label: '0 - CPU only' },
             { value: '1', label: '1 GPU (RTX Titan)' },
           ]}
         />
@@ -194,7 +194,7 @@ export function SubmitJobForm({ currentUser, onSuccess }: Props) {
             <Group grow gap="sm">
               <FileInput
                 label="Setup Script (.sh, optional)"
-                description="Runs before the Python script — use for env setup, data prep, etc."
+                description="Runs before the Python script; use for env setup, data prep, etc."
                 placeholder="Click to select"
                 accept=".sh"
                 value={setupScript}
@@ -238,18 +238,23 @@ export function SubmitJobForm({ currentUser, onSuccess }: Props) {
               <TextInput
                 label="Entrypoint"
                 placeholder={runAsModule ? 'package.train' : 'scripts/train.py'}
-                description={runAsModule ? 'Module path (dots) or file path — both accepted' : undefined}
+                description={runAsModule ? 'Module path (dots) or file path - both accepted' : undefined}
                 value={entrypoint}
                 onChange={(e) => setEntrypoint(e.currentTarget.value)}
                 required
               />
             </Group>
-            <Switch
-              label="Run as module (python -m)"
-              description="Use when your code has relative imports (from .utils import …)"
-              checked={runAsModule}
-              onChange={(e) => setRunAsModule(e.currentTarget.checked)}
-            />
+            <Group gap="sm" align="flex-start" wrap="nowrap">
+              <Switch
+                checked={runAsModule}
+                onChange={(e) => setRunAsModule(e.currentTarget.checked)}
+                mt={3}
+              />
+              <Box>
+                <Text size="sm">Run as module (python -m)</Text>
+                <Text size="xs" c="dimmed">Use when your code has relative imports (from .utils import ...)</Text>
+              </Box>
+            </Group>
             <Group grow>
               <TextInput label="Subdirectory (optional)" placeholder="src" value={repoSubdir} onChange={(e) => setRepoSubdir(e.currentTarget.value)} />
               <TextInput label="Commit Hash (optional)" placeholder="Latest if blank" value={commitHash} onChange={(e) => setCommitHash(e.currentTarget.value)} />

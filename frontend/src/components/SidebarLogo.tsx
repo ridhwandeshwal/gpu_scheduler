@@ -6,7 +6,7 @@ export function SidebarLogo() {
         {/* Chip body */}
         <rect x="11" y="11" width="26" height="26" rx="3" stroke="#e2e8f0" strokeWidth="1.75" fill="none" />
 
-        {/* Inner grid — 3×3 compute cores */}
+        {/* Inner grid - 3×3 compute cores */}
         <rect x="16" y="16" width="5" height="5" rx="1" fill="#94a3b8" />
         <rect x="21.5" y="16" width="5" height="5" rx="1" fill="#94a3b8" />
         <rect x="27" y="16" width="5" height="5" rx="1" fill="#94a3b8" />
@@ -19,22 +19,22 @@ export function SidebarLogo() {
         <rect x="21.5" y="27" width="5" height="5" rx="1" fill="#94a3b8" />
         <rect x="27" y="27" width="5" height="5" rx="1" fill="#94a3b8" />
 
-        {/* Pins — top */}
+        {/* Pins - top */}
         <line x1="18" y1="11" x2="18" y2="6"  stroke="#64748b" strokeWidth="1.5" strokeLinecap="round" />
         <line x1="24" y1="11" x2="24" y2="6"  stroke="#64748b" strokeWidth="1.5" strokeLinecap="round" />
         <line x1="30" y1="11" x2="30" y2="6"  stroke="#64748b" strokeWidth="1.5" strokeLinecap="round" />
 
-        {/* Pins — bottom */}
+        {/* Pins - bottom */}
         <line x1="18" y1="37" x2="18" y2="42" stroke="#64748b" strokeWidth="1.5" strokeLinecap="round" />
         <line x1="24" y1="37" x2="24" y2="42" stroke="#64748b" strokeWidth="1.5" strokeLinecap="round" />
         <line x1="30" y1="37" x2="30" y2="42" stroke="#64748b" strokeWidth="1.5" strokeLinecap="round" />
 
-        {/* Pins — left */}
+        {/* Pins - left */}
         <line x1="11" y1="18" x2="6"  y2="18" stroke="#64748b" strokeWidth="1.5" strokeLinecap="round" />
         <line x1="11" y1="24" x2="6"  y2="24" stroke="#64748b" strokeWidth="1.5" strokeLinecap="round" />
         <line x1="11" y1="30" x2="6"  y2="30" stroke="#64748b" strokeWidth="1.5" strokeLinecap="round" />
 
-        {/* Pins — right */}
+        {/* Pins - right */}
         <line x1="37" y1="18" x2="42" y2="18" stroke="#64748b" strokeWidth="1.5" strokeLinecap="round" />
         <line x1="37" y1="24" x2="42" y2="24" stroke="#64748b" strokeWidth="1.5" strokeLinecap="round" />
         <line x1="37" y1="30" x2="42" y2="30" stroke="#64748b" strokeWidth="1.5" strokeLinecap="round" />

@@ -5,29 +5,29 @@ GPU job scheduler for the lab's shared RTX Titan workstation. Submit Python trai
 ## Architecture
 
 ```
-NeonDB (PostgreSQL — source of truth)
-    ↓
+PostgreSQL (source of truth, self-hosted via Docker)
+    |
 Scheduler  (polls every 2s, allocates GPUs, pushes run IDs to Redis)
-    ↓
+    |
 Redis      (ephemeral dispatch queue)
-    ↓
+    |
 Worker     (BLPOP, prepares workspace, runs Docker container)
-    ↓
-Docker     (hardened sandbox — pip install → setup.sh → train.py)
-    ↓
-/outputs   (bind-mounted host path — artifacts uploaded to MinIO after run)
-    ↓
-MinIO      (S3-compatible object store — presigned URLs for direct download)
+    |
+Docker     (hardened sandbox - pip install -> setup.sh -> train.py)
+    |
+/outputs   (bind-mounted host path - artifacts uploaded to MinIO after run)
+    |
+MinIO      (S3-compatible object store - presigned URLs for direct download)
 ```
 
 ## Tech Stack
 
-- **FastAPI** + **SQLAlchemy 2.0 async** (asyncpg) — backend API
-- **NeonDB** — serverless hosted Postgres
-- **Redis** — ephemeral dispatch queue (Docker, local only)
-- **MinIO** — artifact object storage, S3-compatible, runs locally via Docker
-- **Docker** (rootless on shared machines) — sandboxed job execution with GPU passthrough
-- **Mantine v9** + **TanStack Query v5** — frontend
+- **FastAPI** + **SQLAlchemy 2.0 async** (asyncpg) - backend API
+- **PostgreSQL 16** (self-hosted, Docker) - database
+- **Redis** - ephemeral dispatch queue (Docker)
+- **MinIO** - artifact object storage, S3-compatible (Docker)
+- **Docker** (rootless on shared machines) - sandboxed job execution with GPU passthrough
+- **Mantine v9** + **TanStack Query v5** - frontend
 - **Pydantic v2**, **Uvicorn**
 
 ---
@@ -39,7 +39,6 @@ MinIO      (S3-compatible object store — presigned URLs for direct download)
 - Python 3.11+
 - Node.js 18+
 - Docker
-- Access to the shared NeonDB project (get `DATABASE_URL` from Shreshth)
 
 ### 1. Clone and install
 
@@ -62,10 +61,12 @@ cp .env.example .env
 
 Fill in:
 
-| Variable | Where to get it |
-|----------|-----------------|
-| `DATABASE_URL` | NeonDB connection string — get from Shreshth |
+| Variable | Value |
+|----------|-------|
+| `DATABASE_URL` | `postgresql+asyncpg://gpu_scheduler:gpu_scheduler@localhost:5432/gpu_scheduler` (matches docker-compose defaults) |
 | `SECRET_KEY` | `python -c "import secrets; print(secrets.token_hex(32))"` |
+| `MINIO_ACCESS_KEY` | pick any username |
+| `MINIO_SECRET_KEY` | pick a strong password (min 8 chars) |
 | `UPLOAD_ROOT` | e.g. `/tmp/quda/uploads` |
 | `JOBS_ROOT` | e.g. `/tmp/quda/jobs` |
 | `NAS_ROOT` | e.g. `/tmp/quda/nas` |
@@ -97,13 +98,13 @@ GPU_MODE=nvidia
 ### 4. Start infrastructure
 
 ```bash
-docker compose up -d   # starts Redis + MinIO
+docker compose up -d   # starts Postgres, Redis, MinIO
 ```
 
 ### 5. Run the DB migration
 
 ```bash
-python scripts/migrate_neon.py
+python scripts/migrate.py
 ```
 
 ### 6. Seed hardware
@@ -164,14 +165,17 @@ All services run as Docker containers via `docker-compose.prod.yml`. Traffic is 
 
 ```
 Internet
-    ↓
-Cloudflare (DNS: quda.yourdomain.com → Tunnel)
-    ↓
+    |
+Cloudflare (DNS: quda.yourdomain.com -> Tunnel)
+    |
 cloudflared (outbound-only tunnel, runs on workstation)
-    ↓
+    |
 nginx (port 80, localhost only)
-    ├── /api/*  →  FastAPI (port 8000, internal)
-    └── /*      →  React SPA (static files)
+    +-- /api/*  ->  FastAPI (port 8000, internal)
+    +-- /*      ->  React SPA (static files)
+
+Internal services (Docker network, not exposed):
+    PostgreSQL, Redis, MinIO, Scheduler, Worker
 ```
 
 nginx is necessary because Cloudflare Tunnel routes to a single endpoint. nginx acts as the internal router between the frontend and the API.
@@ -191,7 +195,8 @@ nginx is necessary because Cloudflare Tunnel routes to a single endpoint. nginx 
 
 ```bash
 cp .env.prod.example .env
-# Fill in all values — especially CLOUDFLARE_TUNNEL_TOKEN and the NeonDB URL
+# Fill in: POSTGRES_PASSWORD, SECRET_KEY, MINIO_SECRET_KEY, CLOUDFLARE_TUNNEL_TOKEN
+# Also update DATABASE_URL to use the same password as POSTGRES_PASSWORD
 ```
 
 **3. Build and start**
@@ -203,7 +208,7 @@ docker compose -f docker-compose.prod.yml up -d --build
 **4. Run migration and seed (first time only)**
 
 ```bash
-docker compose -f docker-compose.prod.yml exec api python scripts/migrate_neon.py
+docker compose -f docker-compose.prod.yml exec api python scripts/migrate.py
 
 docker compose -f docker-compose.prod.yml exec api python -c "
 import asyncio, uuid
@@ -310,7 +315,7 @@ Grant admin access (enables priority override when submitting):
 UPDATE users SET role = 'admin' WHERE email = 'user@example.com';
 ```
 
-Run against NeonDB using the connection string in your `.env`.
+Run against the local Postgres using the `DATABASE_URL` in your `.env`.
 
 ---
 
@@ -363,8 +368,8 @@ frontend/src/
 └── lib/                      # Auth helpers, formatting
 
 scripts/
-├── migrate_neon.py           # Idempotent DB schema migration
-├── migrate_neon.sql          # Same in raw SQL
+├── migrate.py                # Idempotent DB schema migration (Python)
+├── migrate.sql               # Same in raw SQL
 ├── requirements.txt          # PyTorch deps for the MNIST smoke test
 ├── sample_python_file.py     # MNIST smoke test (python-file mode)
 └── sample_github_job/        # CIFAR-10 smoke test (github-repo mode)
