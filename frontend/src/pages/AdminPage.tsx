@@ -1,4 +1,3 @@
-import React from 'react';
 import {
   Stack, Title, Text, Table, Paper, Select, ActionIcon,
   Tooltip, Skeleton, Group, Slider, Badge, Tabs,

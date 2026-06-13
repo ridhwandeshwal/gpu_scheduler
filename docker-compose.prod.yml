@@ -104,18 +104,13 @@ services:
       JOBS_ROOT: /app/jobs
       NAS_ROOT: /app/nas
       MINIO_ENDPOINT: http://minio:9000
-      # ── Docker socket ──────────────────────────────────
-      # Standard Docker (default): uncomment the volume below and leave DOCKER_HOST unset.
-      # Rootless Docker: comment the standard volume, uncomment rootless volume + DOCKER_HOST.
-      # DOCKER_HOST: unix:///run/user/1000/docker.sock
+      DOCKER_HOST: unix:///run/user/1000/docker.sock
     volumes:
       - uploads:/app/uploads
       - jobs:/app/jobs
       - nas:/app/nas
-      # Standard Docker socket:
-      - /var/run/docker.sock:/var/run/docker.sock
-      # Rootless Docker socket (replace 1000 with output of `id -u`):
-      # - /run/user/1000/docker.sock:/run/user/1000/docker.sock
+      # rootless Docker socket:
+      - /run/user/1000/docker.sock:/run/user/1000/docker.sock
     depends_on:
       postgres:
         condition: service_healthy
