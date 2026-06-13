@@ -114,9 +114,11 @@ def prepare_workspace(
 
     nas_out = nas_output_dir(run_id)
     nas_out.mkdir(parents=True, exist_ok=True)
+    nas_out.chmod(0o777)
     
     nas_out_data = nas_out / "data"
     nas_out_data.mkdir(parents=True, exist_ok=True)
+    nas_out_data.chmod(0o777)
 
     nas_art = nas_artifacts_dir(run_id)
     nas_art.mkdir(parents=True, exist_ok=True)
