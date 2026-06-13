@@ -28,6 +28,15 @@ def _client() -> Minio:
     return Minio(endpoint, access_key=settings.minio_access_key, secret_key=settings.minio_secret_key, secure=secure)
 
 
+def _public_client() -> Minio:
+    if not settings.minio_public_endpoint:
+        return _client()
+    
+    endpoint = settings.minio_public_endpoint.removeprefix("http://").removeprefix("https://")
+    secure = settings.minio_public_endpoint.startswith("https://")
+    return Minio(endpoint, access_key=settings.minio_access_key, secret_key=settings.minio_secret_key, secure=secure)
+
+
 def ensure_bucket() -> None:
     """Create the artifact bucket if it doesn't exist. Call once at startup."""
     client = _client()
@@ -48,7 +57,7 @@ def upload_artifact(local_path: Path, object_key: str) -> int:
 
 def presign_download(object_key: str, expires_in: int = 900) -> str:
     """Generate a presigned GET URL valid for `expires_in` seconds (default 15 min)."""
-    client = _client()
+    client = _public_client()
     url = client.presigned_get_object(
         settings.minio_bucket,
         object_key,

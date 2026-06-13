@@ -186,10 +186,13 @@ nginx is necessary because Cloudflare Tunnel routes to a single endpoint. nginx 
 
 1. Go to [Cloudflare Zero Trust Dashboard](https://one.dash.cloudflare.com) → Networks → Tunnels
 2. Create a tunnel named `quda`
-3. Under **Public Hostnames**, add:
+3. Under **Public Hostnames**, add the main application route:
    - Subdomain: `quda` (or whatever you want), Domain: `yourdomain.com`
    - Service: `http://localhost:80`
-4. Copy the tunnel token
+4. **(Required for Artifact Downloads)** Add a second Public Hostname for MinIO:
+   - Subdomain: `minio.quda`, Domain: `yourdomain.com`
+   - Service: `http://localhost:9100`
+5. Copy the tunnel token
 
 **2. Configure environment**
 
@@ -197,6 +200,7 @@ nginx is necessary because Cloudflare Tunnel routes to a single endpoint. nginx 
 cp .env.prod.example .env
 # Fill in: POSTGRES_PASSWORD, SECRET_KEY, MINIO_SECRET_KEY, CLOUDFLARE_TUNNEL_TOKEN
 # Also update DATABASE_URL to use the same password as POSTGRES_PASSWORD
+# Set MINIO_PUBLIC_ENDPOINT to the hostname you configured in step 1 (e.g., https://minio.quda.yourdomain.com)
 ```
 
 **3. Build and start**

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from functools import lru_cache
+from typing import Optional
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -37,6 +38,7 @@ class Settings(BaseSettings):
 
     # ── MinIO (artifact storage) ──────────────────────────
     minio_endpoint: str = "http://localhost:9000"
+    minio_public_endpoint: Optional[str] = None
     minio_access_key: str = "minioadmin"
     minio_secret_key: str = "minioadmin"
     minio_bucket: str = "artifacts"

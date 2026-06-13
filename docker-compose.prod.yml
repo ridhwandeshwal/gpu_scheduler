@@ -64,6 +64,7 @@ services:
       JOBS_ROOT: /app/jobs
       NAS_ROOT: /app/nas
       MINIO_ENDPOINT: http://minio:9000   # internal Docker network address
+      MINIO_PUBLIC_ENDPOINT: ${MINIO_PUBLIC_ENDPOINT:-}
     volumes:
       - uploads:/app/uploads
       - jobs:/app/jobs
@@ -104,6 +105,7 @@ services:
       JOBS_ROOT: /app/jobs
       NAS_ROOT: /app/nas
       MINIO_ENDPOINT: http://minio:9000
+      MINIO_PUBLIC_ENDPOINT: ${MINIO_PUBLIC_ENDPOINT:-}
       DOCKER_HOST: unix:///run/user/1000/docker.sock
     volumes:
       - uploads:/app/uploads
