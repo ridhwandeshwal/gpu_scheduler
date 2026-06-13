@@ -9,5 +9,6 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY app/ ./app/
+COPY scripts/ ./scripts/
 
 # CMD is set per-service in docker-compose.prod.yml
