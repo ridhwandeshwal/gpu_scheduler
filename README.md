@@ -232,7 +232,7 @@ asyncio.run(seed())
 
 Once running, the app is live at `https://quda.yourdomain.com`.
 
-### Rootless Docker
+### Rootless Docker & Path Mapping
 
 If running rootless Docker on the workstation, update `docker-compose.prod.yml` in the `worker` service:
 
@@ -247,6 +247,19 @@ And add to the worker environment:
 ```yaml
 DOCKER_HOST: unix:///run/user/1000/docker.sock
 ```
+
+**IMPORTANT (Docker-out-of-Docker Volume Mapping):**
+Because the worker spawns sibling containers on the host Docker daemon, the Docker daemon needs to know the *real host paths* of your volumes. If you use named volumes in rootless Docker or custom bind mounts, you must provide their absolute host paths in your `.env` so the worker can translate them correctly:
+
+```env
+# If using rootless docker named volumes, it's typically:
+HOST_JOBS_ROOT=/home/youruser/.local/share/docker/volumes/gpu_scheduler_jobs/_data
+HOST_NAS_ROOT=/home/youruser/.local/share/docker/volumes/gpu_scheduler_nas/_data
+
+# Or if using bind mounts in docker-compose.prod.yml, point to those exact paths:
+# HOST_JOBS_ROOT=/opt/gpu_scheduler/data/jobs
+```
+This prevents `mkdir /app: permission denied` errors during job startup.
 
 ### Useful commands
 

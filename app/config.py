@@ -31,6 +31,10 @@ class Settings(BaseSettings):
     jobs_root: str = "/gpu_scheduler/jobs"
     nas_root: str = "/mnt/nas/gpu_scheduler"
 
+    # Host storage paths for Docker-out-of-Docker (DooD) mapping
+    host_jobs_root: str = ""
+    host_nas_root: str = ""
+
     # ── MinIO (artifact storage) ──────────────────────────
     minio_endpoint: str = "http://localhost:9000"
     minio_access_key: str = "minioadmin"

@@ -342,8 +342,16 @@ class DockerRunner:
         _validate_mount_path(config.workspace, settings.jobs_root)
         _validate_mount_path(config.output_dir, settings.nas_root)
 
-        args += ["-v", f"{config.workspace}:/workspace:ro"]
-        args += ["-v", f"{config.output_dir}:/outputs:rw"]
+        host_workspace = str(config.workspace)
+        if settings.host_jobs_root:
+            host_workspace = host_workspace.replace(str(settings.jobs_root), str(settings.host_jobs_root), 1)
+
+        host_output_dir = str(config.output_dir)
+        if settings.host_nas_root:
+            host_output_dir = host_output_dir.replace(str(settings.nas_root), str(settings.host_nas_root), 1)
+
+        args += ["-v", f"{host_workspace}:/workspace:ro"]
+        args += ["-v", f"{host_output_dir}:/outputs:rw"]
         args += ["--workdir", "/workspace"]
 
         # ── Environment variables (sanitised) ─────────────
