@@ -3,17 +3,18 @@ import {
   AppShell, NavLink, Group, Text, Avatar,
   ActionIcon, Divider, useMantineColorScheme, Tooltip,
 } from '@mantine/core';
-import { Terminal, ShieldAlert, LogOut, Sun, Moon, FolderOpen } from 'lucide-react';
+import { Terminal, ShieldAlert, LogOut, Sun, Moon, FolderOpen, BookOpen } from 'lucide-react';
 import { LoginPage } from './pages/LoginPage';
 import { JobsPage } from './pages/JobsPage';
 import { AdminPage } from './pages/AdminPage';
 import { ArtifactsPage } from './pages/ArtifactsPage';
+import { DocsPage } from './pages/DocsPage';
 import { SidebarLogo } from './components/SidebarLogo';
 import { authApi } from './api/auth';
 import { getStoredUser, clearSession } from './lib/auth';
 import type { StoredUser } from './lib/auth';
 
-type Page = 'jobs' | 'artifacts' | 'admin';
+type Page = 'jobs' | 'artifacts' | 'admin' | 'docs';
 
 export default function App() {
   const [user, setUser] = useState<StoredUser | null>(() => getStoredUser());
@@ -53,6 +54,13 @@ export default function App() {
             leftSection={<FolderOpen size={16} />}
             active={page === 'artifacts'}
             onClick={() => setPage('artifacts')}
+            mb={4}
+          />
+          <NavLink
+            label="Docs"
+            leftSection={<BookOpen size={16} />}
+            active={page === 'docs'}
+            onClick={() => setPage('docs')}
             mb={4}
           />
           {user.role === 'admin' && (
@@ -98,6 +106,7 @@ export default function App() {
       <AppShell.Main>
         {page === 'jobs' && <JobsPage currentUser={user} />}
         {page === 'artifacts' && <ArtifactsPage />}
+        {page === 'docs' && <DocsPage />}
         {page === 'admin' && user.role === 'admin' && <AdminPage currentUser={user} />}
       </AppShell.Main>
     </AppShell>
